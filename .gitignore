@@ -1,0 +1,11 @@
+# weight
+*.pt
+
+# csv file
+*.csv
+
+# runs folder
+runs
+
+# ignore pycache
+__pycache__
