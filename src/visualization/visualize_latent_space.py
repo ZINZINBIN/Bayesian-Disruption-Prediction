@@ -6,21 +6,25 @@ from torch.utils.data import DataLoader, Dataset
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from tqdm.auto import tqdm
+from scipy.interpolate import SmoothBivariateSpline
+from sklearn.linear_model import LogisticRegression
 
-def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png'):
+def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2):
     model.to(device)
     model.eval()
     
     total_label = np.array([])
     total_latent = []
         
-    for idx, (data, target) in enumerate(dataloader):
+    for idx, (data, target) in enumerate(tqdm(dataloader, desc="visualize 2D latent space")):
         with torch.no_grad():
-            data = data.to(device)
-            latent = model.encode(data)
+            latent = model.encode(data.to(device))
             batch = data.size()[0]
             total_latent.append(latent.detach().cpu().numpy().reshape(batch,-1))
             total_label = np.concatenate((total_label, target.detach().cpu().numpy().reshape(-1,)), axis = 0)
+            
+        if limit_iters >0 and idx + 1 > limit_iters:
+            break
     
     total_latent = np.concatenate(total_latent, axis = 0)
     total_label = total_label.astype(int)
@@ -29,8 +33,10 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
     label  = np.array(['disruption','normal'])
     
     # using PCA
+    print("Dimension reduction process : start")
     pca = PCA(n_components=2, random_state=42)
     total_latent = pca.fit_transform(total_latent)
+    print("Dimension reduction process : complete")
     
     # using t-SNE
     # tSNE = TSNE(n_components=2, perplexity = 64)
@@ -45,23 +51,32 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
     plt.xlabel('z-0')
     plt.ylabel('z-1')
     plt.legend()
+    plt.tight_layout()
     plt.savefig(save_dir)
     
-def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png'):
+# revised : visualize 2D latent space and decision boundary at once
+def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/decision_boundary_2D_space.png', limit_iters : int = 2):
     model.to(device)
     model.eval()
     
     total_label = np.array([])
+    total_probs = []
     total_latent = []
         
-    for idx, (data, target) in enumerate(dataloader):
+    for idx, (data, target) in enumerate(tqdm(dataloader, desc="visualize 2D latent space with decision boundary")):
         with torch.no_grad():
-            data = data.to(device)
-            latent = model.encode(data)
+            latent = model.encode(data.to(device))
+            probs = model(data.to(device))
+            probs = torch.nn.functional.softmax(probs, dim = 1)[:,0]
+            probs = probs.cpu().detach().numpy().tolist()
+        
             batch = data.size()[0]
-            
             total_latent.append(latent.detach().cpu().numpy().reshape(batch,-1))
             total_label = np.concatenate((total_label, target.detach().cpu().numpy().reshape(-1,)), axis = 0)
+            total_probs.extend(probs)
+            
+        if limit_iters >0 and idx + 1 > limit_iters:
+            break
     
     total_latent = np.concatenate(total_latent, axis = 0)
     total_label = total_label.astype(int)
@@ -70,8 +85,69 @@ def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device
     label  = np.array(['disruption','normal'])
     
     # using PCA
+    print("Dimension reduction process : start")
+    pca = PCA(n_components=2, random_state=42)
+    total_latent = pca.fit_transform(total_latent)
+    
+    print("Dimension reduction process : complete")
+    
+    # meshgrid
+    latent_x, latent_y = total_latent[:,0], total_latent[:,1]
+    latent_x, latent_y = np.meshgrid(latent_x, latent_y)
+    
+    interpolate_fn = SmoothBivariateSpline(latent_x[0,:], latent_y[:,0], np.array(total_probs))
+    probs_z = interpolate_fn(latent_x, latent_y, grid = False)
+    probs_z = np.clip(probs_z, 0, 1)
+    
+    dis_idx = np.where(total_label == 0)
+    normal_idx = np.where(total_label == 1)
+    
+    level = np.linspace(0,1.0,8)
+    plt.figure(figsize = (8,6))
+    plt.contourf(latent_x, latent_y, probs_z, level = level, cmap = plt.cm.coolwarm)
+    
+    mp = plt.cm.ScalarMappable(cmap = plt.cm.coolwarm)
+    mp.set_array(probs_z)
+    mp.set_clim(0, 1.0)
+    
+    plt.colorbar(mp, boundaries = np.linspace(0,1,5))
+    plt.scatter(total_latent[normal_idx,0], total_latent[normal_idx,1], c = color[1], label = label[1])
+    plt.scatter(total_latent[dis_idx,0], total_latent[dis_idx,1], c = color[0], label = label[0])
+    plt.xlabel('z-0')
+    plt.ylabel('z-1')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(save_dir)
+    
+def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2):
+    model.to(device)
+    model.eval()
+    
+    total_label = np.array([])
+    total_latent = []
+        
+    for idx, (data, target) in enumerate(tqdm(dataloader, desc = "visualize 3D latent space")):
+        with torch.no_grad():
+            latent = model.encode(data.to(device))
+            batch = data.size()[0]
+            
+            total_latent.append(latent.detach().cpu().numpy().reshape(batch,-1))
+            total_label = np.concatenate((total_label, target.detach().cpu().numpy().reshape(-1,)), axis = 0)
+            
+        if limit_iters > 0 and idx + 1 > limit_iters:
+            break
+    
+    total_latent = np.concatenate(total_latent, axis = 0)
+    total_label = total_label.astype(int)
+    
+    color = np.array(['#1f77b4', '#ff7f0e'])
+    label  = np.array(['disruption','normal'])
+    
+    # using PCA
+    print("Dimension reduction process : start")
     pca = PCA(n_components=3, random_state=42)
     total_latent = pca.fit_transform(total_latent)
+    print("Dimension reduction process : complete")
     
     # using t-SNE
     # tSNE = TSNE(n_components=3, perplexity = 64)
@@ -89,4 +165,5 @@ def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device
     ax.set_ylabel('z-1')
     ax.set_zlabel('z-2')
     ax.legend()
+    fig.tight_layout()
     plt.savefig(save_dir)

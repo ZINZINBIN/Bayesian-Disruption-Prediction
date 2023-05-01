@@ -7,7 +7,7 @@ from src.dataset import DatasetFor0D
 from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
 from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
-from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_3D_latent_space
+from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_3D_latent_space, visualize_2D_decision_boundary
 from src.visualization.visualize_application import generate_real_time_experiment_0D
 from src.train import train
 from src.evaluate import evaluate
@@ -55,7 +55,7 @@ def parsing():
     
     # early stopping
     parser.add_argument('--early_stopping', type = bool, default = True)
-    parser.add_argument("--early_stopping_patience", type = int, default = 32)
+    parser.add_argument("--early_stopping_patience", type = int, default = 40)
     parser.add_argument("--early_stopping_verbose", type = bool, default = True)
     parser.add_argument("--early_stopping_delta", type = float, default = 1e-3)
 
@@ -295,6 +295,7 @@ if __name__ == "__main__":
         os.path.join(save_dir, "{}_feature_importance.png".format(tag))
     )
     
+    
     # Additional analyzation
     print("\n====================== Visualization process ======================\n")
     
@@ -302,6 +303,7 @@ if __name__ == "__main__":
         train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=None, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
     
     try:
+        
         visualize_2D_latent_space(
             model, 
             train_loader,
@@ -309,11 +311,27 @@ if __name__ == "__main__":
             os.path.join(save_dir, "{}_2D_latent_train.png".format(tag))
         )
         
+        
         visualize_2D_latent_space(
             model, 
             test_loader,
             device,
             os.path.join(save_dir, "{}_2D_latent_test.png".format(tag))
+        )
+        
+        
+        visualize_2D_decision_boundary(
+            model, 
+            train_loader,
+            device,
+            os.path.join(save_dir, "{}_2D_decision_boundary_train.png".format(tag))
+        )
+        
+        visualize_2D_decision_boundary(
+            model, 
+            test_loader,
+            device,
+            os.path.join(save_dir, "{}_2D_decision_boundary_test.png".format(tag))
         )
         
     except:

@@ -64,6 +64,11 @@ class Transformer(nn.Module):
         )
         
         self.transformer_encoder = nn.TransformerEncoder(encoder, num_layers=n_layers)
+        self.connector = nn.Sequential(
+            nn.Linear(feature_dims, feature_dims),
+            nn.GELU()
+        )
+        
         self.classifier = nn.Sequential(
             nn.Linear(feature_dims, cls_dims),
             nn.BatchNorm1d(cls_dims),
@@ -83,6 +88,7 @@ class Transformer(nn.Module):
         
             x = self.pos_enc(x)
             x = self.transformer_encoder(x, self.src_mask.to(x.device)).permute(1,0,2).mean(dim = 1)
+            x = self.connector(x)
         return x
 
     def forward(self, x : torch.Tensor):
@@ -98,7 +104,7 @@ class Transformer(nn.Module):
             self.src_mask = mask
         x = self.pos_enc(x)
         x = self.transformer_encoder(x, self.src_mask.to(x.device)).permute(1,0,2).mean(dim = 1) # (seq_len, batch, feature_dims)
-        
+        x = self.connector(x)
         # Generative classifier
         x = self.classifier(x)
         return x
@@ -142,6 +148,10 @@ class TransformerEncoder(nn.Module):
         )
         
         self.transformer_encoder = nn.TransformerEncoder(encoder, num_layers=n_layers)
+        self.connector = nn.Sequential(
+            nn.Linear(feature_dims, feature_dims),
+            nn.GELU()
+        )
         
     def forward(self, x : torch.Tensor):
         # Transformer Encoder
@@ -155,6 +165,7 @@ class TransformerEncoder(nn.Module):
             self.src_mask = mask
         x = self.pos_enc(x)
         x = self.transformer_encoder(x, self.src_mask.to(x.device)).permute(1,0,2).mean(dim = 1) # (seq_len, batch, feature_dims)
+        x = self.connector(x)
         
         return x
 

@@ -7,7 +7,7 @@ from src.dataset import DatasetFor0D
 from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
 from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
-from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_3D_latent_space
+from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_3D_latent_space, visualize_2D_decision_boundary
 from src.visualization.visualize_application import generate_real_time_experiment_0D
 from src.train_bayes import train
 from src.evaluate import evaluate
@@ -319,6 +319,20 @@ if __name__ == "__main__":
             test_loader,
             device,
             os.path.join(save_dir, "{}_2D_latent_test.png".format(tag))
+        )
+        
+        visualize_2D_decision_boundary(
+            model, 
+            train_loader,
+            device,
+            os.path.join(save_dir, "{}_2D_decision_boundary_train.png".format(tag))
+        )
+        
+        visualize_2D_decision_boundary(
+            model, 
+            test_loader,
+            device,
+            os.path.join(save_dir, "{}_2D_decision_boundary_test.png".format(tag))
         )
         
     except:
