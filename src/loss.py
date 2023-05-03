@@ -66,7 +66,7 @@ class LDAMLoss(nn.Module):
 
         output = torch.where(idx, x_m, x)
 
-        return F.cross_entropy(self.s * output, target, weight = self.weight)
+        return F.cross_entropy(self.s * output, target, weight = self.weight, reduction = 'sum')
     
 class CELoss(nn.Module):
     def __init__(self, weight : Optional[torch.Tensor] = None):
@@ -79,3 +79,27 @@ class CELoss(nn.Module):
     
     def forward(self, x : torch.Tensor, target : torch.Tensor):
         return F.cross_entropy(x, target, weight = self.weight, reduction = 'sum')
+    
+# Label smoothing
+# Reference : https://cvml.tistory.com/9
+class LabelSmoothingLoss(nn.Module):
+    def __init__(self, original_loss : nn.Module, alpha : float = 0.01, kl_weight : float = 0.2, classes : int = 2, dim : int = -1):
+        super().__init__()
+        self.original_loss = original_loss
+        self.confidence = 1.0 - alpha
+        self.alpha = alpha
+        self.cls = classes
+        self.dim = dim
+        self.kl_weight = kl_weight
+        
+    def forward(self, x : torch.Tensor, target : torch.Tensor):
+        loss = self.original_loss(x, target)
+        
+        with torch.no_grad():
+            true_dist = torch.zeros_like(x)
+            true_dist.fill_(self.alpha / (self.cls - 1))
+            true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
+        
+        log_p = x.log_softmax(dim = self.dim)
+        kl_loss = torch.sum(true_dist * log_p, dim = self.dim).sum()
+        return loss + kl_loss * self.kl_weight

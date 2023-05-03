@@ -53,7 +53,7 @@ def ts_interpolate(df : pd.DataFrame, df_disruption : pd.DataFrame, dt : float =
             df[col] = df[col].apply(lambda x : x if x > 0 else 0)
             
     # scaling for Ipmhd
-    df['\\ipmhd'] = df['\\ipmhd'].apply(lambda x : x / 1e5)
+    df['\\ipmhd'] = df['\\ipmhd'].apply(lambda x : x / 1e6)
         
     # TCI data
     for col in config.TCI:
@@ -65,7 +65,7 @@ def ts_interpolate(df : pd.DataFrame, df_disruption : pd.DataFrame, dt : float =
     # RC scaling
     for col in config.RC:
         if col == "\\RC03":
-            df[col] = df[col].apply(lambda x : x / 1e5)
+            df[col] = df[col].apply(lambda x : x / 1e6)
         elif col == '\\VCM03':
             df[col] = df[col].apply(lambda x : x / 1e6)
         elif col == '\\RCPPU1' or col == '\\RCPPL1':
@@ -86,6 +86,12 @@ def ts_interpolate(df : pd.DataFrame, df_disruption : pd.DataFrame, dt : float =
     for shot in tqdm(shot_list, desc = 'remove the invalid values'):
         # dataframe per shot
         df_shot = df[df.shot==shot]
+        
+        # addition : ne_inter01 is important to check disruption event
+        if (df_shot['\\ne_inter01'].isnull().sum() > 0.5 * len(df_shot)) or (df_shot["\\ne_inter01"].max() - df_shot['\\ne_inter01'].min() < 1e-3): 
+            shot_ignore.append(shot)
+            print("shot : {} - ne_inter01 null data".format(shot))
+            continue
         
         # time length of the experiment is too short : at least larger than 2(s)
         if df_shot.time.iloc[-1] - df_shot.time.iloc[0] < 2.0:
@@ -191,7 +197,7 @@ def ts_interpolate(df : pd.DataFrame, df_disruption : pd.DataFrame, dt : float =
 
         for col in cols:
             data = df_shot[col].values.reshape(-1,)
-            interp = interp1d(t, data, kind = 'linear', fill_value = 'extrapolate')
+            interp = interp1d(t, data, kind = 'cubic', fill_value = 'extrapolate')
             data_extend = interp(t_extend).reshape(-1,)
             dict_extend[col] = data_extend
 
@@ -199,11 +205,17 @@ def ts_interpolate(df : pd.DataFrame, df_disruption : pd.DataFrame, dt : float =
         df_interpolate = pd.concat([df_interpolate, df_shot_extend], axis = 0).reset_index(drop = True)
         
     # Feature engineering
+    # Tompson diagnostics : core value estimation
     df_interpolate['\\TS_NE_CORE_AVG'] = df_interpolate[config.TS_NE_CORE_COLS].mean(axis = 1)
     df_interpolate['\\TS_NE_EDGE_AVG'] = df_interpolate[config.TS_NE_EDGE_COLS].mean(axis = 1)
     
     df_interpolate['\\TS_TE_CORE_AVG'] = df_interpolate[config.TS_TE_CORE_COLS].mean(axis = 1)
     df_interpolate['\\TS_TE_EDGE_AVG'] = df_interpolate[config.TS_TE_EDGE_COLS].mean(axis = 1)
+    
+    # Greenwald density and fraction
+    import math
+    df_interpolate['\\nG'] = df_interpolate['\\ipmhd'] / math.pi / df_interpolate['\\aminor'] ** 2
+    df_interpolate['\\ne_nG_ratio'] = df_interpolate['\\ne_inter01'] / df_interpolate['\\nG'] * 0.1
     
     df_interpolate['shot'] = df_interpolate['shot'].astype(int)
     
@@ -224,7 +236,6 @@ def ts_interpolate(df : pd.DataFrame, df_disruption : pd.DataFrame, dt : float =
     df_interpolate['\\WTOT_DLM03'] = df_interpolate['\\WTOT_DLM03'].apply(lambda x : x if x > 0 else 0)
     
     return df_interpolate
-
 
 if __name__ == "__main__":
     

@@ -5,7 +5,7 @@ class Config():
     STATE_FIXED = 42
     
     # default columns for use
-    DEFAULT_COLS = ['\\q95','\\ipmhd','\\kappa','\\tritop','\\tribot','\\betap','\\li','\\rsurf','\\aminor']
+    DEFAULT_COLS = ['\\q95', '\\ipmhd', '\\kappa', '\\tritop', '\\tribot', '\\betap', '\\li', '\\rsurf', '\\aminor']
     
     # columns for lock mode detection
     LM = ['\\LM01','\\LM02','\\LM03','\\LM04']
@@ -62,12 +62,14 @@ class Config():
         '\\ne_inter01' : 'Ne-avg', 
         '\\TS_NE_CORE_AVG' : 'Ne-core', 
         '\\TS_TE_CORE_AVG': 'Te-core',
+        '\\nG' : 'N-Greenwald',
+        '\\ne_nG_ratio' : 'NG ratio'
     }
     
     # select input features
     input_features = [
           '\\q95', '\\ipmhd', '\\kappa', '\\tritop', '\\tribot',
-          '\\betap','\\li', '\\WTOT_DLM03','\\ne_inter01', 
+          '\\betap','\\li', '\\WTOT_DLM03', '\\ne_inter01', '\\ne_nG_ratio',
           '\\TS_NE_CORE_AVG', '\\TS_TE_CORE_AVG'
           ]
     

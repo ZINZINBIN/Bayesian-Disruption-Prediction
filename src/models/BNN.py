@@ -177,6 +177,7 @@ class BayesianTransformer(nn.Module):
     def __init__(
         self, 
         n_features : int = 11, 
+        kernel_size : int = 5,
         feature_dims : int = 256, 
         max_len : int = 128, 
         n_layers : int = 1, 
@@ -190,7 +191,7 @@ class BayesianTransformer(nn.Module):
         prior_sigma2 : Optional[float] = 0.0025
         ):
         super().__init__()
-        self.encoder = TransformerEncoder(n_features, feature_dims, max_len, n_layers, n_heads, dim_feedforward, dropout)
+        self.encoder = TransformerEncoder(n_features, kernel_size, feature_dims, max_len, n_layers, n_heads, dim_feedforward, dropout)
         self.classifier = nn.Sequential(
             BayesLinear(feature_dims, cls_dims, prior_pi, prior_sigma1, prior_sigma2),
             nn.BatchNorm1d(cls_dims),

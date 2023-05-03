@@ -56,7 +56,7 @@ def deterministic_split(shot_list : List, test_size : float = 0.2):
 
 
 # train-test split for 0D data models
-def preparing_0D_dataset(filepath : str = "./dataset/KSTAR_Disruption_ts_data_extend.csv", random_state : int = STATE_FIXED, ts_cols : Optional[List] = None, scaler : Literal['Robust', 'Standard', 'MinMax'] = 'Robust'):
+def preparing_0D_dataset(filepath : str = "./dataset/KSTAR_Disruption_ts_data_extend.csv", random_state : int = STATE_FIXED, ts_cols : Optional[List] = None, scaler : Literal['Robust', 'Standard', 'MinMax', 'None'] = 'Robust'):
     
     # preparing 0D data for use
     df = pd.read_csv(filepath).reset_index()
@@ -100,10 +100,13 @@ def preparing_0D_dataset(filepath : str = "./dataset/KSTAR_Disruption_ts_data_ex
         scaler = RobustScaler()
     elif scaler == 'Standard':
         scaler = StandardScaler()
-    else:
+    elif scaler == 'MinMax':
         scaler = MinMaxScaler()
+    else:
+        scaler = None
     
-    scaler.fit(df_train[ts_cols].values)
+    if scaler is not None:
+        scaler.fit(df_train[ts_cols].values)
 
     return df_train, df_valid, df_test, scaler
     
@@ -124,7 +127,7 @@ class DatasetFor0D(Dataset):
         seq_len : int = 21, 
         dist:int = 3, 
         dt : float = 1.0 / 210 * 4,
-        scaler : BaseEstimator = None,
+        scaler : Optional[BaseEstimator] = None,
         ):
         
         self.ts_data = ts_data
@@ -134,13 +137,10 @@ class DatasetFor0D(Dataset):
         self.dist = dist
         self.indices = [idx for idx in range(0, len(self.ts_data) - seq_len - dist)]
         
-        from sklearn.preprocessing import RobustScaler
-        if scaler is None:
-            self.scaler = RobustScaler()
-        else:
-            self.scaler = scaler
+        self.scaler = scaler
             
-        self.ts_data[cols] = self.scaler.fit_transform(self.ts_data[cols].values)
+        if self.scaler is not None:
+            self.ts_data[cols] = self.scaler.fit_transform(self.ts_data[cols].values)
    
     def __len__(self):
         return len(self.indices)

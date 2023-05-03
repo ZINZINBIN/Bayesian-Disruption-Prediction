@@ -37,6 +37,7 @@ class Transformer(nn.Module):
     def __init__(
         self, 
         n_features : int = 11, 
+        kernel_size : int = 5,
         feature_dims : int = 256, 
         max_len : int = 128, 
         n_layers : int = 1, 
@@ -51,7 +52,14 @@ class Transformer(nn.Module):
         self.n_features = n_features
         self.max_len = max_len
         self.feature_dims = feature_dims
-        self.noise = NoiseLayer(mean = 0, std = 1e-2)
+        self.noise = NoiseLayer(mean = 0, std = 1e-3)
+        
+        if kernel_size // 2 == 0:
+            print("kernel sholud be odd number")
+            kernel_size += 1
+        padding = (kernel_size - 1) // 2
+        self.conv = nn.Conv1d(in_channels = n_features, out_channels = n_features, kernel_size = kernel_size, stride = 1, padding = padding)
+        
         self.encoder_input_layer = nn.Linear(in_features = n_features, out_features = feature_dims)
         self.pos_enc = PositionalEncoding(d_model = feature_dims, max_len = max_len)
         
@@ -79,6 +87,7 @@ class Transformer(nn.Module):
     def encode(self, x: torch.Tensor):
         with torch.no_grad():
             x = self.noise(x)
+            x = self.conv(x.permute(0,2,1)).permute(0,2,1)
             x = self.encoder_input_layer(x)
             x = x.permute(1,0,2)
             if self.src_mask is None or self.src_mask.size(0) != len(x):
@@ -96,6 +105,7 @@ class Transformer(nn.Module):
         # Transformer Encoder
         # Embedding for low dimensional space
         x = self.noise(x)
+        x = self.conv(x.permute(0,2,1)).permute(0,2,1)
         x = self.encoder_input_layer(x)
         x = x.permute(1,0,2)
         if self.src_mask is None or self.src_mask.size(0) != len(x):
@@ -123,6 +133,7 @@ class TransformerEncoder(nn.Module):
     def __init__(
         self, 
         n_features : int = 11, 
+        kernel_size : int = 5,
         feature_dims : int = 256, 
         max_len : int = 128, 
         n_layers : int = 1, 
@@ -135,7 +146,14 @@ class TransformerEncoder(nn.Module):
         self.n_features = n_features
         self.max_len = max_len
         self.feature_dims = feature_dims
-        self.noise = NoiseLayer(mean = 0, std = 1e-2)
+        self.noise = NoiseLayer(mean = 0, std = 1e-3)
+        
+        if kernel_size // 2 == 0:
+            print("kernel sholud be odd number")
+            kernel_size += 1
+        padding = (kernel_size - 1) // 2
+        
+        self.conv = nn.Conv1d(in_channels = n_features, out_channels = n_features, kernel_size = kernel_size, stride = 1, padding = padding)
         self.encoder_input_layer = nn.Linear(in_features = n_features, out_features = feature_dims)
         self.pos_enc = PositionalEncoding(d_model = feature_dims, max_len = max_len)
         
@@ -157,6 +175,7 @@ class TransformerEncoder(nn.Module):
         # Transformer Encoder
         # Embedding for low dimensional space
         x = self.noise(x)
+        x = self.conv(x.permute(0,2,1)).permute(0,2,1)
         x = self.encoder_input_layer(x)
         x = x.permute(1,0,2)
         if self.src_mask is None or self.src_mask.size(0) != len(x):

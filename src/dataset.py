@@ -71,7 +71,7 @@ class DatasetFor0D(Dataset):
             df_shot = self.ts_data[self.ts_data.shot == shot].copy()
             self.ts_data.loc[self.ts_data.shot == shot, self.cols] = df_shot[self.cols].fillna(0)
             
-        if self.scaler:
+        if self.scaler is not None:
             self.ts_data[self.cols] = self.scaler.transform(self.ts_data[self.cols])
 
     def _generate_index(self):
@@ -89,7 +89,7 @@ class DatasetFor0D(Dataset):
             labels = []
 
             idx = int(tftsrt / self.dt)
-            idx_last = len(df_shot.index) - self.seq_len - self.dist
+            idx_last = len(df_shot.index)
 
             while(idx < idx_last):
                 
@@ -103,13 +103,13 @@ class DatasetFor0D(Dataset):
                     indx = df_shot.index.values[idx]
                     indices.append(indx)
                     labels.append(1)
-                    idx += self.seq_len // 3
+                    idx += self.seq_len // 4
                     
                 elif t >= t_disrupt - self.dt * (1.5 * self.seq_len + self.dist) and t < t_disrupt - self.dt * (self.seq_len + self.dist):
                     indx = df_shot.index.values[idx]
                     indices.append(indx)
                     labels.append(1)
-                    idx += 1
+                    idx += self.seq_len // 8
                 
                 elif t >= t_disrupt - self.dt * (self.seq_len + self.dist) and t <= t_disrupt - self.dt * self.seq_len + self.dt:
                     indx = df_shot.index.values[idx]
@@ -118,13 +118,13 @@ class DatasetFor0D(Dataset):
                     idx += 1
                 
                 elif t < tftsrt:
-                    idx += self.seq_len
+                    idx += self.seq_len // 4
                 
                 elif t > t_disrupt:
                     break
                 
                 else:
-                    idx += self.seq_len
+                    idx += self.seq_len // 4
                     
             self.shot_num.extend([shot for _ in range(len(indices))])
             self.indices.extend(indices)

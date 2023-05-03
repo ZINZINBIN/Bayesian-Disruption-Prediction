@@ -7,9 +7,9 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from tqdm.auto import tqdm
 from scipy.interpolate import SmoothBivariateSpline
-from sklearn.linear_model import LogisticRegression
+from typing import Literal
 
-def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2):
+def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA'):
     model.to(device)
     model.eval()
     
@@ -32,15 +32,17 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
     color = np.array(['#1f77b4', '#ff7f0e'])
     label  = np.array(['disruption','normal'])
     
-    # using PCA
-    print("Dimension reduction process : start")
-    pca = PCA(n_components=2, random_state=42)
-    total_latent = pca.fit_transform(total_latent)
-    print("Dimension reduction process : complete")
     
-    # using t-SNE
-    # tSNE = TSNE(n_components=2, perplexity = 64)
-    # total_latent = tSNE.fit_transform(total_latent)
+    print("Dimension reduction process : start | latent vector : ({}, {})".format(total_latent.shape[0], total_latent.shape[1]))
+    if method == 'PCA':
+        # using PCA
+        pca = PCA(n_components=2, random_state=42)
+        total_latent = pca.fit_transform(total_latent)
+    else:
+        # using t-SNE
+        tSNE = TSNE(n_components=2, perplexity = 64)
+        total_latent = tSNE.fit_transform(total_latent)   
+    print("Dimension reduction process : complete")
     
     dis_idx = np.where(total_label == 0)
     normal_idx = np.where(total_label == 1)
@@ -54,8 +56,10 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
     plt.tight_layout()
     plt.savefig(save_dir)
     
+    return
+    
 # revised : visualize 2D latent space and decision boundary at once
-def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/decision_boundary_2D_space.png', limit_iters : int = 2):
+def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/decision_boundary_2D_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA'):
     model.to(device)
     model.eval()
     
@@ -84,11 +88,15 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
     color = np.array(['#1f77b4', '#ff7f0e'])
     label  = np.array(['disruption','normal'])
     
-    # using PCA
-    print("Dimension reduction process : start")
-    pca = PCA(n_components=2, random_state=42)
-    total_latent = pca.fit_transform(total_latent)
-    
+    print("Dimension reduction process : start | latent vector : ({}, {})".format(total_latent.shape[0], total_latent.shape[1]))
+    if method == 'PCA':
+        # using PCA
+        pca = PCA(n_components=2, random_state=42)
+        total_latent = pca.fit_transform(total_latent)
+    else:
+        # using t-SNE
+        tSNE = TSNE(n_components=2, perplexity = 64)
+        total_latent = tSNE.fit_transform(total_latent)   
     print("Dimension reduction process : complete")
     
     # meshgrid
@@ -119,7 +127,9 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
     plt.tight_layout()
     plt.savefig(save_dir)
     
-def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2):
+    return
+    
+def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA'):
     model.to(device)
     model.eval()
     
@@ -143,15 +153,16 @@ def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device
     color = np.array(['#1f77b4', '#ff7f0e'])
     label  = np.array(['disruption','normal'])
     
-    # using PCA
-    print("Dimension reduction process : start")
-    pca = PCA(n_components=3, random_state=42)
-    total_latent = pca.fit_transform(total_latent)
+    print("Dimension reduction process : start | latent vector : ({}, {})".format(total_latent.shape[0], total_latent.shape[1]))
+    if method == 'PCA':
+        # using PCA
+        pca = PCA(n_components=3, random_state=42)
+        total_latent = pca.fit_transform(total_latent)
+    else:
+        # using t-SNE
+        tSNE = TSNE(n_components=3, perplexity = 64)
+        total_latent = tSNE.fit_transform(total_latent)   
     print("Dimension reduction process : complete")
-    
-    # using t-SNE
-    # tSNE = TSNE(n_components=3, perplexity = 64)
-    # total_latent = tSNE.fit_transform(total_latent)
     
     dis_idx = np.where(total_label == 0)
     normal_idx = np.where(total_label == 1)
@@ -167,3 +178,5 @@ def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device
     ax.legend()
     fig.tight_layout()
     plt.savefig(save_dir)
+    
+    return

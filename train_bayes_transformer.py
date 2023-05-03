@@ -7,11 +7,10 @@ from src.dataset import DatasetFor0D
 from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
 from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
-from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_3D_latent_space, visualize_2D_decision_boundary
-from src.visualization.visualize_application import generate_real_time_experiment_0D
+from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_2D_decision_boundary
 from src.train_bayes import train
 from src.evaluate import evaluate
-from src.loss import FocalLoss, LDAMLoss, CELoss
+from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
 from src.models.BNN import BayesianTransformer
 from src.feature_importance import compute_permute_feature_importance
 from src.config import Config
@@ -35,7 +34,10 @@ def parsing():
 
     # gpu allocation
     parser.add_argument("--gpu_num", type = int, default = 0)
-
+    
+    # scaler type
+    parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "None")
+    
     # batch size / sequence length / epochs / distance / num workers / pin memory use
     parser.add_argument("--batch_size", type = int, default = 256)
     parser.add_argument("--num_epoch", type = int, default = 128)
@@ -69,6 +71,11 @@ def parsing():
     # loss type : CE, Focal, LDAM
     parser.add_argument("--loss_type", type = str, default = "Focal", choices = ['CE','Focal', 'LDAM'])
     
+    # label smoothing
+    parser.add_argument("--use_label_smoothing", type = bool, default = False)
+    parser.add_argument("--smoothing", type = float, default = 0.05)
+    parser.add_argument("--kl_weight", type = float, default = 0.2)
+    
     # LDAM Loss parameter
     parser.add_argument("--max_m", type = float, default = 0.5)
     parser.add_argument("--s", type = float, default = 1.0)
@@ -82,6 +89,7 @@ def parsing():
     # model setup : transformer
     parser.add_argument("--alpha", type = float, default = 0.01)
     parser.add_argument("--dropout", type = float, default = 0.25)
+    parser.add_argument("--kernel_size", type = int, default = 5)
     parser.add_argument("--feature_dims", type = int, default = 128)
     parser.add_argument("--n_layers", type = int, default = 4)
     parser.add_argument("--n_heads", type = int, default = 8)
@@ -130,6 +138,9 @@ if __name__ == "__main__":
     # tag : {model_name}_clip_{seq_len}_dist_{pred_len}_{Loss-type}_{Boosting-type}
     loss_type = args['loss_type']
     
+    if args['use_label_smoothing']:
+        loss_type = "{}_smoothing".format(loss_type)
+    
     if args['use_sampling'] and not args['use_weighting']:
         boost_type = "RS"
     elif args['use_sampling'] and args['use_weighting']:
@@ -138,8 +149,13 @@ if __name__ == "__main__":
         boost_type = "RW"
     elif not args['use_sampling'] and not args['use_weighting']:
         boost_type = "Normal"
+        
+    if args['scaler'] == 'None':
+        scale_type = "no_scaling"
+    else:
+        scale_type = args['scaler']
     
-    tag = "{}_clip_{}_dist_{}_{}_{}_seed_{}".format(args["tag"], args["seq_len"], args["dist"], loss_type, boost_type, args['random_seed'])
+    tag = "{}_clip_{}_dist_{}_{}_{}_{}_seed_{}".format(args["tag"], args["seq_len"], args["dist"], loss_type, boost_type, scale_type, args['random_seed'])
     print("================= Running code =================")
     print("Setting : {}".format(tag))
     
@@ -154,7 +170,7 @@ if __name__ == "__main__":
         device = 'cpu'
         
     # dataset setup
-    ts_train, ts_valid, ts_test, ts_scaler = preparing_0D_dataset("./dataset/KSTAR_Disruption_ts_data_extend.csv", ts_cols = ts_cols, scaler = 'Robust')
+    ts_train, ts_valid, ts_test, ts_scaler = preparing_0D_dataset("./dataset/KSTAR_Disruption_ts_data_extend.csv", ts_cols = ts_cols, scaler = args['scaler'])
     kstar_shot_list = pd.read_csv('./dataset/KSTAR_Disruption_Shot_List_2022.csv', encoding = "euc-kr")
 
     train_data = DatasetFor0D(ts_train, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.025, scaler = ts_scaler)
@@ -173,6 +189,7 @@ if __name__ == "__main__":
     # define model
     model = BayesianTransformer(
         n_features=len(ts_cols),
+        kernel_size = args['kernel_size'],
         feature_dims = args['feature_dims'],
         max_len = args['seq_len'],
         n_layers = args['n_layers'],
@@ -244,6 +261,9 @@ if __name__ == "__main__":
         loss_fn = FocalLoss(weight = per_cls_weights, gamma = focal_gamma)
     else:
         loss_fn = CELoss(weight = per_cls_weights)
+        
+    if args['use_label_smoothing']:
+        loss_fn = LabelSmoothingLoss(loss_fn, alpha = args['smoothing'], kl_weight = args['kl_weight'], classes = 2)
 
     # training process
     print("\n======================= training process =======================\n")
@@ -337,23 +357,6 @@ if __name__ == "__main__":
         
     except:
         print("{} : visualize 2D latent space doesn't work due to stability error".format(tag))
-    
-    try:
-        visualize_3D_latent_space(
-            model, 
-            train_loader,
-            device,
-            os.path.join(save_dir, "{}_3D_latent_train.png".format(tag))
-        )
-        
-        visualize_3D_latent_space(
-            model, 
-            test_loader,
-            device,
-            os.path.join(save_dir, "{}_3D_latent_test.png".format(tag))
-        )
-    except:
-        print("{} : visualize 3D latent space doesn't work due to stability error".format(tag))
     
     # plot probability curve
     test_shot_num = args['test_shot_num']

@@ -104,7 +104,10 @@ def compute_permute_feature_importance(
     # feature name mapping
     feature_map = config.feature_map
     
-    df.rename(columns = feature_map)
+    def _convert_str(x : str):
+        return feature_map[x]
+    
+    df['feature'] = df['feature'].apply(lambda x : _convert_str(x))
     df = df.sort_values('feature_importance')
     
     plt.figure(figsize = (8,8))
