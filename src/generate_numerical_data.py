@@ -245,7 +245,7 @@ if __name__ == "__main__":
     print(df.describe())
 
     cols = df.columns[df.notna().any()].drop(['Unnamed: 0','shot','time']).tolist()
-    dt = 0.025
+    dt = 0.02
     
     df_extend = ts_interpolate(df, df_disrupt, dt)
     df_extend.to_csv("./dataset/KSTAR_Disruption_ts_data_extend.csv", index = False)

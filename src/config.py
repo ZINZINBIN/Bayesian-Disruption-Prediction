@@ -57,19 +57,25 @@ class Config():
         '\\tribot': 'tri-bot',
         '\\betap': 'betap',
         '\\betan': 'betan',
-        '\\li': 'li', 
+        '\\li': 'li',  
         '\\WTOT_DLM03':'W-tot',
         '\\ne_inter01' : 'Ne-avg', 
         '\\TS_NE_CORE_AVG' : 'Ne-core', 
         '\\TS_TE_CORE_AVG': 'Te-core',
+        '\\TS_NE_EDGE_AVG' : 'Ne-edge', 
+        '\\TS_TE_EDGE_AVG': 'Te-edge',
         '\\nG' : 'N-Greenwald',
-        '\\ne_nG_ratio' : 'NG ratio'
+        '\\ne_nG_ratio' : 'NG ratio',
+        '\\DLM03': 'DLM03',
+        '\\RC03' : 'RC03',
+        '\\VCM03' : 'VCM03'
     }
     
     # select input features
     input_features = [
           '\\q95', '\\ipmhd', '\\kappa', '\\tritop', '\\tribot',
           '\\betap','\\li', '\\WTOT_DLM03', '\\ne_inter01', '\\ne_nG_ratio',
-          '\\TS_NE_CORE_AVG', '\\TS_TE_CORE_AVG'
-          ]
+          '\\TS_NE_CORE_AVG', '\\TS_TE_CORE_AVG', '\\TS_TE_EDGE_AVG', '\\TS_NE_EDGE_AVG',
+          '\\DLM03', '\\RC03','\\VCM03',
+    ]
     

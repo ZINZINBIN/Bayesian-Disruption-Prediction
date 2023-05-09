@@ -124,9 +124,9 @@ class DatasetFor0D(Dataset):
         self, 
         ts_data : pd.DataFrame, 
         cols : List, 
-        seq_len : int = 21, 
+        seq_len : int = 16, 
         dist:int = 3, 
-        dt : float = 1.0 / 210 * 4,
+        dt : float = 0.025,
         scaler : Optional[BaseEstimator] = None,
         ):
         
@@ -166,7 +166,7 @@ def generate_prob_curve_from_0D(
     shot_num : Optional[int] = None,
     seq_len : Optional[int] = None,
     dist : Optional[int] = None,
-    dt : Optional[int] = None,
+    dt : Optional[float] = None,
     scaler : Optional[BaseEstimator] = None,
     ):
     
@@ -190,7 +190,6 @@ def generate_prob_curve_from_0D(
     ip = ts_data_0D['\\ipmhd']
     kappa = ts_data_0D['\\kappa']
     betap = ts_data_0D['\\betap']
-    betan = ts_data_0D['\\betan']
     li = ts_data_0D['\\li']
     q95 = ts_data_0D['\\q95']
     tritop = ts_data_0D['\\tritop']
@@ -227,9 +226,9 @@ def generate_prob_curve_from_0D(
             )
             
     interval = 1
-    fps = int(1 / 0.025)
+    fps = int(1 / dt)
     
-    prob_list = [0] * seq_len + prob_list
+    prob_list = [0] * (seq_len + dist - 1 + int((tftsrt - dt * 4) / dt)) + prob_list + [0] * int(0.5 / dt)
     
     # correction for startup peaking effect : we will soon solve this problem
     for idx, prob in enumerate(prob_list):
@@ -245,11 +244,7 @@ def generate_prob_curve_from_0D(
     
     time_x = np.arange(0, len(prob_list)) * (1/fps)
     
-    print("time : ", len(time_x))
-    print("prob : ", len(prob_list))
-    print("flat-top : ", tftsrt)
-    print("thermal quench : ", tTQend)
-    print("current quench: ", tipminf)
+    print("\n(Info) flat-top : {:.3f}(s) | thermal quench : {:.3f}(s) | current quench : {:.3f}(s)\n".format(tftsrt, tTQend, tipminf))
     
     t_disrupt = tTQend
     t_current = tipminf
@@ -291,8 +286,8 @@ def generate_prob_curve_from_0D(
     ax_Ip.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
     
     ax_Ip.set_xlabel("time(s)")
-    ax_Ip.set_xticks(t_quantile)
-    ax_Ip.set_xticklabels(["{:.1f}".format(t) for t in t_quantile])
+    # ax_Ip.set_xticks(t_quantile)
+    # ax_Ip.set_xticklabels(["{:.1f}".format(t) for t in t_quantile])
     
     # line density
     ax_li = fig.add_subplot(gs[0,1])
@@ -324,8 +319,8 @@ def generate_prob_curve_from_0D(
     ax_ne.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
     
     ax_ne.set_xlabel("time(s)")
-    ax_ne.set_xticks(t_quantile)
-    ax_ne.set_xticklabels(["{:.1f}".format(t) for t in t_quantile])
+    # ax_ne.set_xticks(t_quantile)
+    # ax_ne.set_xticklabels(["{:.1f}".format(t) for t in t_quantile])
     
     # probability
     threshold_line = [0.5] * len(time_x)
@@ -338,16 +333,15 @@ def generate_prob_curve_from_0D(
     ax2.set_ylabel("probability")
     ax2.set_xlabel("time(unit : s)")
     ax2.set_ylim([0,1])
-    ax2.set_xlim([0, max(time_x)])
+    ax2.set_xlim([0, max(time_x) + dt * 8])
     ax2.legend(loc = 'upper right')
     
     fig.tight_layout()
 
-    plt.savefig(save_dir, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
+    if save_dir:
+        plt.savefig(save_dir, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
 
-    return time_x, prob_list
-
-
+    return fig, time_x, prob_list
 
 def plot_learning_curve(train_loss, valid_loss, train_f1, valid_f1, figsize : Tuple[int,int] = (12,6), save_dir : str = "./results/learning_curve.png"):
     x_epochs = range(1, len(train_loss) + 1)

@@ -7,12 +7,7 @@ from src.dataset import DatasetFor0D
 from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
 from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
-from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_2D_decision_boundary
-from src.train_bayes import train
-from src.evaluate import evaluate
-from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
-from src.models.BNN import BayesianTransformer
-from src.feature_importance import compute_permute_feature_importance
+from src.models.BNN import BayesianTransformer, compute_ensemble_probability
 from src.config import Config
 
 config = Config()
@@ -177,15 +172,6 @@ if __name__ == "__main__":
     valid_data = DatasetFor0D(ts_valid, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
     test_data = DatasetFor0D(ts_test, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
     
-    print("================= Dataset information =================")
-    print("train data : {}, disrupt : {}, non-disrupt : {}".format(train_data.__len__(), train_data.n_disrupt, train_data.n_normal))
-    print("valid data : {}, disrupt : {}, non-disrupt : {}".format(valid_data.__len__(), valid_data.n_disrupt, valid_data.n_normal))
-    print("test data : {}, disrupt : {}, non-disrupt : {}".format(test_data.__len__(), test_data.n_disrupt, test_data.n_normal))
-    
-    # label distribution for LDAM / Focal Loss
-    train_data.get_num_per_cls()
-    cls_num_list = train_data.get_cls_num_list()
-
     # define model
     model = BayesianTransformer(
         n_features=len(ts_cols),
@@ -207,24 +193,6 @@ if __name__ == "__main__":
     model.summary()
     model.to(device)
 
-    # optimizer
-    if args["optimizer"] == "SGD":
-        optimizer = torch.optim.SGD(model.parameters(), lr = args['lr'])
-    elif args["optimizer"] == "RMSProps":
-        optimizer = torch.optim.RMSprop(model.parameters(), lr = args['lr'])
-    elif args["optimizer"] == "Adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr = args['lr'])
-    elif args["optimizer"] == "AdamW":
-        optimizer = torch.optim.AdamW(model.parameters(), lr = args['lr'])
-    else:
-        optimizer = torch.optim.AdamW(model.parameters(), lr = args['lr'])
-        
-    # scheduler
-    if args["use_scheduler"]:    
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = args['step_size'], gamma=args['gamma'])
-    else:
-        scheduler = None
-        
     # Re-sampling
     if args["use_sampling"]:
         train_sampler = ImbalancedDatasetSampler(train_data)
@@ -235,143 +203,49 @@ if __name__ == "__main__":
         train_sampler = RandomSampler(train_data)
         valid_sampler = RandomSampler(valid_data)
         test_sampler = RandomSampler(test_data)
-    
-    train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=train_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
-    valid_loader = DataLoader(valid_data, batch_size = args['batch_size'], sampler=valid_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
-    test_loader = DataLoader(test_data, batch_size = args['batch_size'], sampler=test_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
-
-    # Re-weighting
-    if args['use_weighting']:
-        per_cls_weights = 1.0 / np.array(cls_num_list)
-        per_cls_weights = per_cls_weights / np.sum(per_cls_weights)
-        per_cls_weights = torch.FloatTensor(per_cls_weights).to(device)
-    else:
-        per_cls_weights = np.array([1,1])
-        per_cls_weights = torch.FloatTensor(per_cls_weights).to(device)
+       
         
-    # loss
-    if args['loss_type'] == "CE":
-        loss_fn = CELoss(weight = per_cls_weights)
-    elif args['loss_type'] == 'LDAM':
-        max_m = args['max_m']
-        s = args['s']
-        loss_fn = LDAMLoss(cls_num_list, max_m = max_m, s = s, weight = per_cls_weights)
-    elif args['loss_type'] == 'Focal':
-        focal_gamma = args['focal_gamma']
-        loss_fn = FocalLoss(weight = per_cls_weights, gamma = focal_gamma)
-    else:
-        loss_fn = CELoss(weight = per_cls_weights)
-        
-    if args['use_label_smoothing']:
-        loss_fn = LabelSmoothingLoss(loss_fn, alpha = args['smoothing'], kl_weight = args['kl_weight'], classes = 2)
-
-    # training process
-    print("\n======================= training process =======================\n")
-    train_loss,  train_acc, train_f1, valid_loss, valid_acc, valid_f1 = train(
-        train_loader,
-        valid_loader,
-        model,
-        optimizer,
-        scheduler,
-        loss_fn,
-        device,
-        args['num_epoch'],
-        args['verbose'],
-        save_best_dir = save_best_dir,
-        save_last_dir = save_last_dir,
-        exp_dir = exp_dir,
-        max_norm_grad = 1.0,
-        test_for_check_per_epoch=test_loader,
-        is_early_stopping = args['early_stopping'],
-        early_stopping_verbose = args['early_stopping_verbose'],
-        early_stopping_patience = args['early_stopping_patience'],
-        early_stopping_delta = args['early_stopping_delta']
-    )
-    
-    # plot the learning curve
-    save_learning_curve = os.path.join(save_dir, "{}_lr_curve.png".format(tag))
-    plot_learning_curve(train_loss, valid_loss, train_f1, valid_f1, figsize = (12,6), save_dir = save_learning_curve)
-    
-    # evaluation process
-    print("\n====================== evaluation process ======================\n")
     model.load_state_dict(torch.load(save_best_dir))
     
-    save_conf = os.path.join(save_dir, "{}_test_confusion.png".format(tag))
-    save_txt = os.path.join(save_dir, "{}_test_eval.txt".format(tag))
+    # experiment
+    test_loader = DataLoader(test_data, batch_size = 1, sampler=test_sampler, num_workers = 1, pin_memory=args["pin_memory"])
+
+    test_data = None
+    test_label = None
     
-    test_loss, test_acc, test_f1 = evaluate(
-        test_loader,
-        model,
-        optimizer,
-        loss_fn,
-        device,
-        save_conf = save_conf,
-        save_txt = save_txt
-    )
+    for idx, (data, label) in enumerate(test_loader):
+        if label.numpy() == 0:
+            test_data = data
+            test_label = label
+            break
     
-    # compute the feature importance of the variables
-    print("\n====================== Feature Importance ======================\n")
-    compute_permute_feature_importance(
-        model,
-        test_loader,
-        ts_cols,
-        loss_fn,
-        device,
-        'loss',
-        os.path.join(save_dir, "{}_feature_importance.png".format(tag))
-    )
+    test_pred = compute_ensemble_probability(model, test_data, device, n_samples = 128)
+    print("test_pred : ", test_pred)
+    print("true label : ", test_label)
     
-    # Additional analyzation
-    print("\n====================== Visualization process ======================\n")
-    if args['use_sampling']:
-        train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=None, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
+    preds_disrupt = test_pred[:,0]
+    preds_normal = test_pred[:,1]
     
-    try:
-        visualize_2D_latent_space(
-            model, 
-            train_loader,
-            device,
-            os.path.join(save_dir, "{}_2D_latent_train.png".format(tag))
-        )
-        
-        visualize_2D_latent_space(
-            model, 
-            test_loader,
-            device,
-            os.path.join(save_dir, "{}_2D_latent_test.png".format(tag))
-        )
-        
-        visualize_2D_decision_boundary(
-            model, 
-            train_loader,
-            device,
-            os.path.join(save_dir, "{}_2D_decision_boundary_train.png".format(tag))
-        )
-        
-        visualize_2D_decision_boundary(
-            model, 
-            test_loader,
-            device,
-            os.path.join(save_dir, "{}_2D_decision_boundary_test.png".format(tag))
-        )
-        
-    except:
-        print("{} : visualize 2D latent space doesn't work due to stability error".format(tag))
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(1,2)
+    axes[0].hist(preds_disrupt.reshape(-1,), bins = 32, color = 'lightgray')
+    axes[1].hist(preds_normal.reshape(-1,), bins = 32, color = 'lightgray')
     
-    # plot probability curve
-    test_shot_num = args['test_shot_num']
+    axes[0].set_xlabel("Output(probs)")
+    axes[0].set_xlim([0,1.0])
+    axes[0].set_ylabel('n-samples')
+    axes[0].set_title("Disruption")
     
-    print("\n====================== Probability curve generation process ======================\n")
-    generate_prob_curve_from_0D(
-        model, 
-        device = device, 
-        save_dir = os.path.join(save_dir, "{}_probs_curve_{}.png".format(tag, test_shot_num)),
-        ts_data_dir = "./dataset/KSTAR_Disruption_ts_data_extend.csv",
-        ts_cols = ts_cols,
-        shot_list_dir = './dataset/KSTAR_Disruption_Shot_List_2022.csv',
-        shot_num = test_shot_num,
-        seq_len = args['seq_len'],
-        dist = args['dist'],
-        dt = 0.02,
-        scaler = ts_scaler
-    )
+    axes[1].set_xlabel("Output(probs)")
+    axes[1].set_xlim([0,1.0])
+    axes[1].set_ylabel('n-samples')
+    axes[1].set_title('Normal')
+    
+    fig.tight_layout()
+    plt.savefig("./test.png")
+    
+    for idx, (data, label) in enumerate(test_loader):
+        if label.numpy() == 1:
+            test_data = data
+            test_label = label
+            break

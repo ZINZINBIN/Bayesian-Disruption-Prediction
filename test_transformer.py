@@ -8,10 +8,10 @@ from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
 from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
 from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_2D_decision_boundary
-from src.train_bayes import train
+from src.train import train
 from src.evaluate import evaluate
 from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
-from src.models.BNN import BayesianTransformer
+from src.models.transformer import Transformer
 from src.feature_importance import compute_permute_feature_importance
 from src.config import Config
 
@@ -20,13 +20,13 @@ ts_cols = config.input_features
 
 # argument parser
 def parsing():
-    parser = argparse.ArgumentParser(description="training disruption prediction model with 0D data for Bayesian approach")
+    parser = argparse.ArgumentParser(description="training disruption prediction model with 0D data")
     
     # random seed
     parser.add_argument("--random_seed", type = int, default = 42)
     
     # tag and result directory
-    parser.add_argument("--tag", type = str, default = "BayesianTransformer")
+    parser.add_argument("--tag", type = str, default = "Transformer")
     parser.add_argument("--save_dir", type = str, default = "./results")
     
     # test shot for disruption probability curve
@@ -34,10 +34,7 @@ def parsing():
 
     # gpu allocation
     parser.add_argument("--gpu_num", type = int, default = 0)
-    
-    # scaler type
-    parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "None")
-    
+
     # batch size / sequence length / epochs / distance / num workers / pin memory use
     parser.add_argument("--batch_size", type = int, default = 256)
     parser.add_argument("--num_epoch", type = int, default = 128)
@@ -45,6 +42,9 @@ def parsing():
     parser.add_argument("--dist", type = int, default = 2)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
+    
+    # scaler type
+    parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "None")
     
     # optimizer : SGD, RMSProps, Adam, AdamW
     parser.add_argument("--optimizer", type = str, default = "AdamW", choices=["SGD","RMSProps","Adam","AdamW"])
@@ -57,7 +57,7 @@ def parsing():
     
     # early stopping
     parser.add_argument('--early_stopping', type = bool, default = True)
-    parser.add_argument("--early_stopping_patience", type = int, default = 32)
+    parser.add_argument("--early_stopping_patience", type = int, default = 40)
     parser.add_argument("--early_stopping_verbose", type = bool, default = True)
     parser.add_argument("--early_stopping_delta", type = float, default = 1e-3)
 
@@ -95,12 +95,7 @@ def parsing():
     parser.add_argument("--n_heads", type = int, default = 8)
     parser.add_argument("--dim_feedforward", type = int, default = 512)
     parser.add_argument("--cls_dims", type = int, default = 128)
-    
-    # Bayesian classifier
-    parser.add_argument("--prior_pi", type = float, default = 0.5)
-    parser.add_argument("--prior_sigma1", type = float, default = 1.0)
-    parser.add_argument("--prior_sigma2", type = float, default = 0.0025)
-    
+        
     args = vars(parser.parse_args())
 
     return args
@@ -173,9 +168,9 @@ if __name__ == "__main__":
     ts_train, ts_valid, ts_test, ts_scaler = preparing_0D_dataset("./dataset/KSTAR_Disruption_ts_data_extend.csv", ts_cols = ts_cols, scaler = args['scaler'])
     kstar_shot_list = pd.read_csv('./dataset/KSTAR_Disruption_Shot_List_2022.csv', encoding = "euc-kr")
 
-    train_data = DatasetFor0D(ts_train, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
-    valid_data = DatasetFor0D(ts_valid, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
-    test_data = DatasetFor0D(ts_test, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
+    train_data = DatasetFor0D(ts_train, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.025, scaler = ts_scaler)
+    valid_data = DatasetFor0D(ts_valid, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.025, scaler = ts_scaler)
+    test_data = DatasetFor0D(ts_test, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.025, scaler = ts_scaler)
     
     print("================= Dataset information =================")
     print("train data : {}, disrupt : {}, non-disrupt : {}".format(train_data.__len__(), train_data.n_disrupt, train_data.n_normal))
@@ -187,7 +182,7 @@ if __name__ == "__main__":
     cls_num_list = train_data.get_cls_num_list()
 
     # define model
-    model = BayesianTransformer(
+    model = Transformer(
         n_features=len(ts_cols),
         kernel_size = args['kernel_size'],
         feature_dims = args['feature_dims'],
@@ -198,9 +193,6 @@ if __name__ == "__main__":
         dropout = args['dropout'],
         cls_dims = args['cls_dims'],
         n_classes = 2,
-        prior_pi  = args['prior_pi'], 
-        prior_sigma1 = args['prior_sigma1'], 
-        prior_sigma2 = args['prior_sigma2']
     )
     
     print("\n==================== model summary ====================\n")
@@ -264,49 +256,42 @@ if __name__ == "__main__":
         
     if args['use_label_smoothing']:
         loss_fn = LabelSmoothingLoss(loss_fn, alpha = args['smoothing'], kl_weight = args['kl_weight'], classes = 2)
-
-    # training process
-    print("\n======================= training process =======================\n")
-    train_loss,  train_acc, train_f1, valid_loss, valid_acc, valid_f1 = train(
-        train_loader,
-        valid_loader,
-        model,
-        optimizer,
-        scheduler,
-        loss_fn,
-        device,
-        args['num_epoch'],
-        args['verbose'],
-        save_best_dir = save_best_dir,
-        save_last_dir = save_last_dir,
-        exp_dir = exp_dir,
-        max_norm_grad = 1.0,
-        test_for_check_per_epoch=test_loader,
-        is_early_stopping = args['early_stopping'],
-        early_stopping_verbose = args['early_stopping_verbose'],
-        early_stopping_patience = args['early_stopping_patience'],
-        early_stopping_delta = args['early_stopping_delta']
-    )
-    
-    # plot the learning curve
-    save_learning_curve = os.path.join(save_dir, "{}_lr_curve.png".format(tag))
-    plot_learning_curve(train_loss, valid_loss, train_f1, valid_f1, figsize = (12,6), save_dir = save_learning_curve)
     
     # evaluation process
     print("\n====================== evaluation process ======================\n")
     model.load_state_dict(torch.load(save_best_dir))
     
-    save_conf = os.path.join(save_dir, "{}_test_confusion.png".format(tag))
-    save_txt = os.path.join(save_dir, "{}_test_eval.txt".format(tag))
+    print("\nEvaluation:train-dataset\n")
+    test_loss, test_acc, test_f1 = evaluate(
+        train_loader,
+        model,
+        optimizer,
+        loss_fn,
+        device,
+        save_conf = os.path.join(save_dir, "{}_train_confusion.png".format(tag)),
+        save_txt = os.path.join(save_dir, "{}_train_eval.txt".format(tag))
+    )
     
+    print("\nEvaluation:valid-dataset\n")
+    test_loss, test_acc, test_f1 = evaluate(
+        valid_loader,
+        model,
+        optimizer,
+        loss_fn,
+        device,
+        save_conf = os.path.join(save_dir, "{}_valid_confusion.png".format(tag)),
+        save_txt = os.path.join(save_dir, "{}_valid_eval.txt".format(tag))
+    )
+    
+    print("\nEvaluation:test-dataset\n")
     test_loss, test_acc, test_f1 = evaluate(
         test_loader,
         model,
         optimizer,
         loss_fn,
         device,
-        save_conf = save_conf,
-        save_txt = save_txt
+        save_conf = os.path.join(save_dir, "{}_test_confusion.png".format(tag)),
+        save_txt = os.path.join(save_dir, "{}_test_eval.txt".format(tag))
     )
     
     # compute the feature importance of the variables
@@ -321,12 +306,15 @@ if __name__ == "__main__":
         os.path.join(save_dir, "{}_feature_importance.png".format(tag))
     )
     
+    
     # Additional analyzation
     print("\n====================== Visualization process ======================\n")
+    
     if args['use_sampling']:
         train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=None, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
     
     try:
+        
         visualize_2D_latent_space(
             model, 
             train_loader,
@@ -334,12 +322,14 @@ if __name__ == "__main__":
             os.path.join(save_dir, "{}_2D_latent_train.png".format(tag))
         )
         
+        
         visualize_2D_latent_space(
             model, 
             test_loader,
             device,
             os.path.join(save_dir, "{}_2D_latent_test.png".format(tag))
         )
+        
         
         visualize_2D_decision_boundary(
             model, 
@@ -358,6 +348,7 @@ if __name__ == "__main__":
     except:
         print("{} : visualize 2D latent space doesn't work due to stability error".format(tag))
     
+    
     # plot probability curve
     test_shot_num = args['test_shot_num']
     
@@ -372,6 +363,6 @@ if __name__ == "__main__":
         shot_num = test_shot_num,
         seq_len = args['seq_len'],
         dist = args['dist'],
-        dt = 0.02,
+        dt = 0.025,
         scaler = ts_scaler
     )

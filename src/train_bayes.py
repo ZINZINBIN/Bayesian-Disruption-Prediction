@@ -10,6 +10,7 @@ from src.evaluate import evaluate_tensorboard
 from src.utils.EarlyStopping import EarlyStopping
 from torch.utils.tensorboard import SummaryWriter
 from src.models.BNN import BayesianModule, minibatch_weight
+from src.utils.utility import generate_prob_curve_from_0D
 
 # anomaly detection from training process : backward process
 torch.autograd.set_detect_anomaly(True)
@@ -225,10 +226,27 @@ def train(
                 ))
                 
                 if test_for_check_per_epoch and writer is not None:
+                    # General metrics for checking the precision and recall of the model
                     model.eval()
                     fig = evaluate_tensorboard(test_for_check_per_epoch, model, optimizer, loss_fn, device, 0.5)
                     writer.add_figure('Model-performance', fig, epoch)
+                    
+                    # Checking the performance for continuous disruption prediciton 
+                    fig, _, _ = generate_prob_curve_from_0D(
+                        model = model, 
+                        device = device, 
+                        save_dir = None,
+                        ts_data_dir = "./dataset/KSTAR_Disruption_ts_data_extend.csv",
+                        ts_cols = test_for_check_per_epoch.dataset.cols,
+                        shot_list_dir = './dataset/KSTAR_Disruption_Shot_List_2022.csv',
+                        shot_num = 21310,
+                        seq_len = test_for_check_per_epoch.dataset.seq_len,
+                        dist = test_for_check_per_epoch.dataset.dist,
+                        dt = test_for_check_per_epoch.dataset.dt,
+                        scaler = test_for_check_per_epoch.dataset.scaler
+                    )
                     model.train()
+                    writer.add_figure('Continuous disruption prediction', fig, epoch)
                     
         # save the last parameters
         torch.save(model.state_dict(), save_last_dir)

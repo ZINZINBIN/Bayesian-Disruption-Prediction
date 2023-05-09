@@ -88,7 +88,7 @@ def parsing():
     
     # model setup : transformer
     parser.add_argument("--alpha", type = float, default = 0.01)
-    parser.add_argument("--dropout", type = float, default = 0.25)
+    parser.add_argument("--dropout", type = float, default = 0.1)
     parser.add_argument("--kernel_size", type = int, default = 5)
     parser.add_argument("--feature_dims", type = int, default = 128)
     parser.add_argument("--n_layers", type = int, default = 4)
@@ -168,9 +168,9 @@ if __name__ == "__main__":
     ts_train, ts_valid, ts_test, ts_scaler = preparing_0D_dataset("./dataset/KSTAR_Disruption_ts_data_extend.csv", ts_cols = ts_cols, scaler = args['scaler'])
     kstar_shot_list = pd.read_csv('./dataset/KSTAR_Disruption_Shot_List_2022.csv', encoding = "euc-kr")
 
-    train_data = DatasetFor0D(ts_train, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.025, scaler = ts_scaler)
-    valid_data = DatasetFor0D(ts_valid, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.025, scaler = ts_scaler)
-    test_data = DatasetFor0D(ts_test, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.025, scaler = ts_scaler)
+    train_data = DatasetFor0D(ts_train, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
+    valid_data = DatasetFor0D(ts_valid, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
+    test_data = DatasetFor0D(ts_test, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
     
     print("================= Dataset information =================")
     print("train data : {}, disrupt : {}, non-disrupt : {}".format(train_data.__len__(), train_data.n_disrupt, train_data.n_normal))
@@ -256,7 +256,8 @@ if __name__ == "__main__":
         
     if args['use_label_smoothing']:
         loss_fn = LabelSmoothingLoss(loss_fn, alpha = args['smoothing'], kl_weight = args['kl_weight'], classes = 2)
-
+    
+    
     # training process
     print("\n======================= training process =======================\n")
     train_loss,  train_acc, train_f1, valid_loss, valid_acc, valid_f1 = train(
@@ -283,6 +284,7 @@ if __name__ == "__main__":
     # plot the learning curve
     save_learning_curve = os.path.join(save_dir, "{}_lr_curve.png".format(tag))
     plot_learning_curve(train_loss, valid_loss, train_f1, valid_f1, figsize = (12,6), save_dir = save_learning_curve)
+    
     
     # evaluation process
     print("\n====================== evaluation process ======================\n")
@@ -355,6 +357,7 @@ if __name__ == "__main__":
     except:
         print("{} : visualize 2D latent space doesn't work due to stability error".format(tag))
     
+    
     # plot probability curve
     test_shot_num = args['test_shot_num']
     
@@ -369,6 +372,6 @@ if __name__ == "__main__":
         shot_num = test_shot_num,
         seq_len = args['seq_len'],
         dist = args['dist'],
-        dt = 0.025,
+        dt = 0.02,
         scaler = ts_scaler
     )

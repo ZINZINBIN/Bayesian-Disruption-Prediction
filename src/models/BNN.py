@@ -54,7 +54,7 @@ class GaussianVariational(nn.Module):
         log_posterior = -log_const - torch.log(self.sigma) - log_exp
         
         return log_posterior.sum()
-    
+
 # Scale Mixture model
 class ScaleMixture(nn.Module):
     def __init__(self, pi : float, sigma1 : float, sigma2 : float):
@@ -156,6 +156,7 @@ class BayesLinear(BayesianModule):
     
     def compute_kld(self, log_prior : torch.Tensor, log_posterior : torch.Tensor):
         return log_posterior - log_prior
+        
 
 class BayesDropout(nn.Module):
     def __init__(self, p : float = 0.5):
@@ -191,6 +192,7 @@ class BayesianTransformer(nn.Module):
         prior_sigma2 : Optional[float] = 0.0025
         ):
         super().__init__()
+        self.n_classes = n_classes
         self.encoder = TransformerEncoder(n_features, kernel_size, feature_dims, max_len, n_layers, n_heads, dim_feedforward, dropout)
         self.classifier = nn.Sequential(
             BayesLinear(feature_dims, cls_dims, prior_pi, prior_sigma1, prior_sigma2),
@@ -212,6 +214,14 @@ class BayesianTransformer(nn.Module):
     def summary(self):
         sample_x = torch.zeros((2, self.encoder.max_len, self.encoder.n_features))
         summary(self, sample_x, batch_size = 2, show_input = True, print_summary=True)
+        
+    def predict_per_sample(self, x : torch.Tensor):
+        with torch.no_grad():
+            x = self.encoder(x)
+            outputs = torch.zeros((x.size()[0], self.n_classes), device = x.device)
+            for idx in range(x.size()[0]):
+                outputs[idx, :] = self.classifier(x[idx, :].unsqueeze(0))
+            return outputs
     
 @variational_approximator
 class BayesianMultiHeadTransformer(nn.Module):
@@ -259,13 +269,12 @@ class BayesianMultiHeadTransformer(nn.Module):
         return x
     
 # Uncertaintiy computation
-def compute_ensemble_probability(model : nn.Module, input : torch.Tensor, device : str = 'cpu', n_samples : int = 8):
+def compute_ensemble_probability(model : BayesianTransformer, input : torch.Tensor, device : str = 'cpu', n_samples : int = 8):
     '''
         Compute the probability of each case with n_samples of the predictive conditional probability
         Input : (1,T,D)
-        Output : Dict['disrupt':[], 'normal':[]]
+        Output : (n_samples, 2) : n_samples of [probs_normal, probs_disrupt]
     '''
-    
     model.eval()
     model.to(device)
     
@@ -273,9 +282,22 @@ def compute_ensemble_probability(model : nn.Module, input : torch.Tensor, device
         input = input.unsqueeze(0)
         
     inputs = input.repeat(n_samples, 1, 1)
-    outputs = model(inputs.to(device))
+    
+    # 배치 단위로 불확실성 계산하는 코드 : 추후 추가 예정
+    outputs = model.predict_per_sample(inputs.to(device))
     probs = torch.nn.functional.softmax(outputs, dim = 1)
+    
+    # 일단 여러번 연산해서 얻는 구조로 진행
+    '''
+    probs = torch.zeros((n_samples, 2), device = device)
+    for idx in range(n_samples):
+        output = model(inputs[idx].unsqueeze(0).to(device))
+        prob = torch.nn.functional.softmax(output, dim = 1)
+        probs[idx,:] = prob
+    '''
+    
     probs = probs.detach().cpu().numpy() 
+    
     return probs
 
 def compute_uncertainty_per_data(model : nn.Module, input : torch.Tensor, device : str = "cpu", n_samples : int = 8, normalized : bool = False):
