@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import argparse
-from src.dataset import DatasetFor0D
+from src.dataset import DatasetForProfile
 from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
 from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
@@ -11,7 +11,7 @@ from src.visualization.visualize_latent_space import visualize_2D_latent_space, 
 from src.train import train
 from src.evaluate import evaluate
 from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
-from src.models.transformer import Transformer
+from src.models.multi_head_model import MultiHeadModel
 from src.feature_importance import compute_permute_feature_importance
 from src.config import Config
 
@@ -20,13 +20,13 @@ ts_cols = config.input_features
 
 # argument parser
 def parsing():
-    parser = argparse.ArgumentParser(description="training disruption prediction model with 0D data")
+    parser = argparse.ArgumentParser(description="training disruption prediction model with 0D + 1D profile")
     
     # random seed
     parser.add_argument("--random_seed", type = int, default = 42)
     
     # tag and result directory
-    parser.add_argument("--tag", type = str, default = "Transformer")
+    parser.add_argument("--tag", type = str, default = "MultiHeadModel")
     parser.add_argument("--save_dir", type = str, default = "./results")
     
     # test shot for disruption probability curve
@@ -38,13 +38,14 @@ def parsing():
     # mode : predicting thermal quench vs current quench
     parser.add_argument("--mode", type = str, default = 'TQ', choices=['TQ','CQ'])
 
-    # batch size / sequence length / epochs / distance / num workers / pin memory use
+    # batch size / sequence length / epochs / distance / num workers / pin memory use / n_points for interpolation
     parser.add_argument("--batch_size", type = int, default = 256)
     parser.add_argument("--num_epoch", type = int, default = 128)
     parser.add_argument("--seq_len", type = int, default = 16)
     parser.add_argument("--dist", type = int, default = 2)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
+    parser.add_argument("--n_points", type = int, default = 128)
     
     # scaler type
     parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "None")
@@ -171,9 +172,9 @@ if __name__ == "__main__":
     ts_train, ts_valid, ts_test, ts_scaler = preparing_0D_dataset("./dataset/KSTAR_Disruption_ts_data_extend.csv", ts_cols = ts_cols, scaler = args['scaler'])
     kstar_shot_list = pd.read_csv('./dataset/KSTAR_Disruption_Shot_List_2022.csv', encoding = "euc-kr")
 
-    train_data = DatasetFor0D(ts_train, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.025, scaler = ts_scaler, mode = args['mode'])
-    valid_data = DatasetFor0D(ts_valid, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.025, scaler = ts_scaler, mode = args['mode'])
-    test_data = DatasetFor0D(ts_test, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.025, scaler = ts_scaler, mode = args['mode'])
+    train_data = DatasetForProfile(ts_train, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler, mode = args['mode'], n_points = args['n_points'])
+    valid_data = DatasetForProfile(ts_valid, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler, mode = args['mode'], n_points = args['n_points'])
+    test_data = DatasetForProfile(ts_test, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler, mode = args['mode'], n_points = args['n_points'])
     
     print("================= Dataset information =================")
     print("train data : {}, disrupt : {}, non-disrupt : {}".format(train_data.__len__(), train_data.n_disrupt, train_data.n_normal))
@@ -185,7 +186,7 @@ if __name__ == "__main__":
     cls_num_list = train_data.get_cls_num_list()
 
     # define model
-    model = Transformer(
+    model = MultiHeadModel(
         n_features=len(ts_cols),
         kernel_size = args['kernel_size'],
         feature_dims = args['feature_dims'],
@@ -195,6 +196,7 @@ if __name__ == "__main__":
         dim_feedforward=args['dim_feedforward'],
         dropout = args['dropout'],
         cls_dims = args['cls_dims'],
+        n_points = args['n_points'],
         n_classes = 2,
     )
     
@@ -235,6 +237,10 @@ if __name__ == "__main__":
     valid_loader = DataLoader(valid_data, batch_size = args['batch_size'], sampler=valid_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
     test_loader = DataLoader(test_data, batch_size = args['batch_size'], sampler=test_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
 
+    sample_data, sample_target = next(iter(test_loader))
+    sample_output = model(sample_data['0D'].to(device), sample_data['ne'].to(device), sample_data['te'].to(device)).cpu()
+    print("sample_output : ", sample_output.size())
+    
     # Re-weighting
     if args['use_weighting']:
         per_cls_weights = 1.0 / np.array(cls_num_list)
@@ -260,41 +266,50 @@ if __name__ == "__main__":
     if args['use_label_smoothing']:
         loss_fn = LabelSmoothingLoss(loss_fn, alpha = args['smoothing'], kl_weight = args['kl_weight'], classes = 2)
     
+    
+    # training process
+    print("\n======================= training process =======================\n")
+    train_loss,  train_acc, train_f1, valid_loss, valid_acc, valid_f1 = train(
+        train_loader,
+        valid_loader,
+        model,
+        optimizer,
+        scheduler,
+        loss_fn,
+        device,
+        args['num_epoch'],
+        args['verbose'],
+        save_best_dir = save_best_dir,
+        save_last_dir = save_last_dir,
+        exp_dir = exp_dir,
+        max_norm_grad = 1.0,
+        test_for_check_per_epoch=test_loader,
+        is_early_stopping = args['early_stopping'],
+        early_stopping_verbose = args['early_stopping_verbose'],
+        early_stopping_patience = args['early_stopping_patience'],
+        early_stopping_delta = args['early_stopping_delta']
+    )
+    
+    # plot the learning curve
+    save_learning_curve = os.path.join(save_dir, "{}_lr_curve.png".format(tag))
+    plot_learning_curve(train_loss, valid_loss, train_f1, valid_f1, figsize = (12,6), save_dir = save_learning_curve)
+    
+    
     # evaluation process
     print("\n====================== evaluation process ======================\n")
     model.load_state_dict(torch.load(save_best_dir))
     
-    print("\nEvaluation:train-dataset\n")
-    test_loss, test_acc, test_f1 = evaluate(
-        train_loader,
-        model,
-        optimizer,
-        loss_fn,
-        device,
-        save_conf = os.path.join(save_dir, "{}_train_confusion.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_train_eval.txt".format(tag))
-    )
+    save_conf = os.path.join(save_dir, "{}_test_confusion.png".format(tag))
+    save_txt = os.path.join(save_dir, "{}_test_eval.txt".format(tag))
     
-    print("\nEvaluation:valid-dataset\n")
-    test_loss, test_acc, test_f1 = evaluate(
-        valid_loader,
-        model,
-        optimizer,
-        loss_fn,
-        device,
-        save_conf = os.path.join(save_dir, "{}_valid_confusion.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_valid_eval.txt".format(tag))
-    )
-    
-    print("\nEvaluation:test-dataset\n")
     test_loss, test_acc, test_f1 = evaluate(
         test_loader,
         model,
         optimizer,
         loss_fn,
         device,
-        save_conf = os.path.join(save_dir, "{}_test_confusion.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_test_eval.txt".format(tag))
+        save_conf = save_conf,
+        save_txt = save_txt
     )
     
     # compute the feature importance of the variables
@@ -366,6 +381,6 @@ if __name__ == "__main__":
         shot_num = test_shot_num,
         seq_len = args['seq_len'],
         dist = args['dist'],
-        dt = 0.025,
+        dt = 0.02,
         scaler = ts_scaler
     )

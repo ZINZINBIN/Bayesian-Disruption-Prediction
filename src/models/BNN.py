@@ -223,51 +223,6 @@ class BayesianTransformer(nn.Module):
                 outputs[idx, :] = self.classifier(x[idx, :].unsqueeze(0))
             return outputs
     
-@variational_approximator
-class BayesianMultiHeadTransformer(nn.Module):
-    def __init__(
-        self,  
-        feature_dims : int = 256, 
-        max_len : int = 128, 
-        n_layers : int = 1, 
-        n_heads : int = 8, 
-        dim_feedforward : int = 1024, 
-        dropout : float = 0.1, 
-        cls_dims : int = 128, 
-        n_classes : int = 2,
-        prior_pi : Optional[float] = 0.5, 
-        prior_sigma1 : Optional[float] = 1.0, 
-        prior_sigma2 : Optional[float] = 0.0025,
-        args_enc : Dict = {}
-        ):
-        super().__init__()
-        self.args_enc = args_enc
-        self.feature_dims = feature_dims
-        self.encoder = nn.ModuleDict([
-            [key, TransformerEncoder(args_enc[key], feature_dims, max_len, n_layers, n_heads, dim_feedforward, dropout)] for key in args_enc.keys()]
-        )
-        self.connector = nn.Linear(feature_dims * len(args_enc.keys()), feature_dims)
-        self.classifier = nn.Sequential(
-            BayesLinear(feature_dims, cls_dims, prior_pi, prior_sigma1, prior_sigma2),
-            nn.BatchNorm1d(cls_dims),
-            GELU(),
-            BayesLinear(cls_dims, n_classes, prior_pi, prior_sigma1, prior_sigma2),
-        )
-    
-    def forward(self, x : Dict):
-        
-        device = next(self.parameters()).get_device()
-        x_concat = []
-        for key in self.args_enc.keys():
-            x_ = self.encoder[key](x[key].to(device))
-            x_concat.append(x_)
-        
-        x_concat = torch.concat(x_concat, dim = 1)
-        x = self.connector(x_concat)
-        x = self.classifier(x)
-        
-        return x
-    
 # Uncertaintiy computation
 def compute_ensemble_probability(model : BayesianTransformer, input : torch.Tensor, device : str = 'cpu', n_samples : int = 8):
     '''

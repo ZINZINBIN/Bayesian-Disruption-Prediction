@@ -4,6 +4,9 @@
 # csv file
 *.csv
 
+# npz file
+*.npz
+
 # runs folder
 runs
 

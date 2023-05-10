@@ -48,6 +48,11 @@ class Config():
                    '\\TS_EDGE13:EDGE13_TE', '\\TS_EDGE14:EDGE14_TE', '\\TS_CORE13:CORE13_NE', '\\TS_CORE14:CORE14_NE', '\\TS_EDGE13:EDGE13_NE', 
                    '\\TS_EDGE14:EDGE14_NE', '\\q0', '\\ne_tci01','\\ne_tci02','\\ne_tci03','\\ne_tci04','\\ne_tci05','\\bcentr']
     
+    # Tompson data : positional information
+    CORE_RADIUS = [1.797, 1.818, 1.841, 1.862, 1.884, 1.908, 1.931, 1.954, 1.979, 2.004, 2.03, 2.056, 2.082, 2.108]
+    EDGE_RADIUS = [2.108, 2.120, 2.133, 2.146, 2.153, 2.171, 2.183, 2.190, 2.197, 2.203, 2.209, 2.216, 2.229, 2.243]
+    RADIUS = CORE_RADIUS + EDGE_RADIUS[1:]
+    
     # permutation feature importance
     feature_map = {
         '\\q95' : 'q95', 

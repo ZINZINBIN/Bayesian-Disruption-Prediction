@@ -51,7 +51,8 @@ class TransformerEncoder(nn.Module):
         self.n_features = n_features
         self.max_len = max_len
         self.feature_dims = feature_dims
-        self.noise = NoiseLayer(mean = 0, std = 1e-3)
+        
+        self.noise = NoiseLayer(mean = 0, std = 4e-3)
         
         if kernel_size // 2 == 0:
             print("kernel sholud be odd number")

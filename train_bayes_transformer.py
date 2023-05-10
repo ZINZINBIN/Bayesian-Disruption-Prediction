@@ -35,6 +35,9 @@ def parsing():
     # gpu allocation
     parser.add_argument("--gpu_num", type = int, default = 0)
     
+    # mode : predicting thermal quench vs current quench
+    parser.add_argument("--mode", type = str, default = 'TQ', choices=['TQ','CQ'])
+
     # scaler type
     parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "None")
     
@@ -57,7 +60,7 @@ def parsing():
     
     # early stopping
     parser.add_argument('--early_stopping', type = bool, default = True)
-    parser.add_argument("--early_stopping_patience", type = int, default = 32)
+    parser.add_argument("--early_stopping_patience", type = int, default = 40)
     parser.add_argument("--early_stopping_verbose", type = bool, default = True)
     parser.add_argument("--early_stopping_delta", type = float, default = 1e-3)
 
@@ -155,7 +158,7 @@ if __name__ == "__main__":
     else:
         scale_type = args['scaler']
     
-    tag = "{}_clip_{}_dist_{}_{}_{}_{}_seed_{}".format(args["tag"], args["seq_len"], args["dist"], loss_type, boost_type, scale_type, args['random_seed'])
+    tag = "{}_clip_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args["seq_len"], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
     print("================= Running code =================")
     print("Setting : {}".format(tag))
     
@@ -173,9 +176,9 @@ if __name__ == "__main__":
     ts_train, ts_valid, ts_test, ts_scaler = preparing_0D_dataset("./dataset/KSTAR_Disruption_ts_data_extend.csv", ts_cols = ts_cols, scaler = args['scaler'])
     kstar_shot_list = pd.read_csv('./dataset/KSTAR_Disruption_Shot_List_2022.csv', encoding = "euc-kr")
 
-    train_data = DatasetFor0D(ts_train, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
-    valid_data = DatasetFor0D(ts_valid, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
-    test_data = DatasetFor0D(ts_test, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler)
+    train_data = DatasetFor0D(ts_train, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler, mode = args['mode'])
+    valid_data = DatasetFor0D(ts_valid, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler, mode = args['mode'])
+    test_data = DatasetFor0D(ts_test, kstar_shot_list, seq_len = args['seq_len'], cols = ts_cols, dist = args['dist'], dt = 0.02, scaler = ts_scaler, mode = args['mode'])
     
     print("================= Dataset information =================")
     print("train data : {}, disrupt : {}, non-disrupt : {}".format(train_data.__len__(), train_data.n_disrupt, train_data.n_normal))
