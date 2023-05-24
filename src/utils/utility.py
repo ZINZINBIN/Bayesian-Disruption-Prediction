@@ -155,6 +155,65 @@ class DatasetFor0D(Dataset):
         data = self.ts_data[self.cols].iloc[idx_srt + 1: idx_end + 1].values
         data = torch.from_numpy(data)
         return data
+    
+class DatasetForProfile(Dataset):
+    def __init__(self, ts_data : pd.DataFrame,  seq_len : int = 21, cols : List = [], dist:int = 3, dt : float = 1.0 / 210 * 4, scaler = None,  n_points : int = 128):
+        self.ts_data = ts_data
+        self.seq_len = seq_len
+        self.dt = dt
+        self.cols = cols
+        self.dist = dist # distance
+
+        self.indices = [idx for idx in range(0, len(self.ts_data) - seq_len - dist)]
+        
+        self.scaler = scaler
+        self.n_points = n_points
+        
+        self.preprocessing()
+        
+    def preprocessing(self):
+        
+        # profile generation : Te and Ne
+        self.ne_profile = np.zeros((len(self.ts_data), self.n_points))
+        self.te_profile = np.zeros((len(self.ts_data), self.n_points))
+        
+        from src.profile import get_profile
+        tes = []
+        nes = []
+        
+        for t in self.ts_data.time:
+            _, te = get_profile(self.ts_data, t, radius = config.RADIUS, cols_core = config.TS_TE_CORE_COLS, cols_edge = config.TS_TE_EDGE_COLS, n_points = self.n_points)
+            _, ne = get_profile(self.ts_data, t, radius = config.RADIUS, cols_core = config.TS_NE_CORE_COLS, cols_edge = config.TS_NE_EDGE_COLS, n_points = self.n_points)
+            tes.append(te.reshape(-1,1))
+            nes.append(ne.reshape(-1,1))
+    
+        self.ne_profile = np.concatenate(nes, axis = 1).transpose(1,0)
+        self.te_profile = np.concatenate(tes, axis = 1).transpose(1,0)
+        
+    def __getitem__(self, idx:int):
+        idx_srt = self.indices[idx]
+        idx_end = idx_srt + self.seq_len
+        
+        # 0D data
+        data_0D = self.ts_data[self.cols].iloc[idx_srt:idx_end].values
+        data_0D = torch.from_numpy(data_0D).float()
+        
+        # profile data
+        te_profile = self.te_profile[idx_srt:idx_end,:]
+        te_profile = torch.from_numpy(te_profile).float().unsqueeze(0)
+        
+        ne_profile = self.ne_profile[idx_srt:idx_end,:]
+        ne_profile = torch.from_numpy(ne_profile).float().unsqueeze(0)
+        
+        data = {
+            "0D" : data_0D,
+            "te" : te_profile,
+            "ne" : ne_profile,
+        }
+        return data
+    
+    def __len__(self):
+        return len(self.indices)
 
 def generate_prob_curve_from_0D(
     model : torch.nn.Module, 
@@ -168,6 +227,7 @@ def generate_prob_curve_from_0D(
     dist : Optional[int] = None,
     dt : Optional[float] = None,
     scaler : Optional[BaseEstimator] = None,
+    use_profile : bool = False,
     ):
     
     # obtain tTQend, tipmin and tftsrt
@@ -200,9 +260,11 @@ def generate_prob_curve_from_0D(
     te_edge = ts_data_0D['\\TS_TE_EDGE_AVG']
     ne_ng_ratio = ts_data_0D['\\ne_nG_ratio']
     
-    
     # video data
-    dataset = DatasetFor0D(ts_data_0D, ts_cols, seq_len, dist, dt, scaler)
+    if use_profile:
+        dataset = DatasetForProfile(ts_data_0D, seq_len, ts_cols, dist, dt, scaler, n_points = 128)
+    else:
+        dataset = DatasetFor0D(ts_data_0D, ts_cols, seq_len, dist, dt, scaler)
 
     prob_list = []
     is_disruption = []
@@ -215,8 +277,11 @@ def generate_prob_curve_from_0D(
     for idx in tqdm(range(dataset.__len__())):
         with torch.no_grad():
             data = dataset.__getitem__(idx)
-            data = data.to(device).unsqueeze(0)
-            output = model(data)
+            if use_profile:
+                output = model(data['0D'].to(device).unsqueeze(0), data['ne'].to(device).unsqueeze(0), data['te'].to(device).unsqueeze(0))
+            else:
+                output = model(data.to(device).unsqueeze(0))
+                
             probs = torch.nn.functional.softmax(output, dim = 1)[:,0]
             probs = probs.cpu().detach().numpy().tolist()
 

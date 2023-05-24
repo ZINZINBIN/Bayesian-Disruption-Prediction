@@ -31,19 +31,13 @@ def train_per_epoch(
     train_loss = 0
     train_acc = 0
 
-    total_pred = np.array([])
-    total_label = np.array([])
+    total_pred = []
+    total_label = []
     total_size = 0
 
     for batch_idx, (data, target) in enumerate(train_loader):
        
-        if data.size()[0] <=1:
-            continue
-    
-        for param in model.parameters():
-            param.grad = None
-        
-        data = data.to(device)
+        optimizer.zero_grad()
         output = model(data.to(device)) 
         loss = loss_fn(output, target.to(device))
         
@@ -65,11 +59,14 @@ def train_per_epoch(
         train_acc += pred.eq(target.to(device).view_as(pred)).sum().item()
         total_size += pred.size(0) 
         
-        total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
-        total_label = np.concatenate((total_label, target.cpu().numpy().reshape(-1,)))
+        total_pred.append(pred.view(-1,1))
+        total_label.append(target.view(-1,1))
         
     if scheduler:
         scheduler.step()
+        
+    total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
+    total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
 
     if total_size > 0:
         train_loss /= total_size
@@ -96,8 +93,8 @@ def valid_per_epoch(
     valid_loss = 0
     valid_acc = 0
 
-    total_pred = np.array([])
-    total_label = np.array([])
+    total_pred = []
+    total_label = []
     total_size = 0
 
     for batch_idx, (data, target) in enumerate(valid_loader):
@@ -113,8 +110,11 @@ def valid_per_epoch(
             valid_acc += pred.eq(target.to(device).view_as(pred)).sum().item()
             total_size += pred.size(0)
 
-            total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
-            total_label = np.concatenate((total_label, target.cpu().numpy().reshape(-1,)))
+            total_pred.append(pred.view(-1,1))
+            total_label.append(target.view(-1,1))
+
+    total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
+    total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
 
     valid_loss /= total_size
     valid_acc /= total_size

@@ -82,7 +82,7 @@ class MultiHeadModel(nn.Module):
             x_0D = self.encoder_0D(x_0D)
             x_ne = self.encoder_ne(ne_profile)
             x_te = self.encoder_te(te_profile)
-            x = torch.concat([x_0D, x_ne, x_te])
+            x = torch.concat([x_0D, x_ne, x_te], dim = 1)
             x = self.connector(x)
         return x
     

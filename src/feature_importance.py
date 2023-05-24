@@ -31,6 +31,7 @@ def compute_loss(
     model : nn.Module,
     loss_fn : nn.Module,
     device : str = "cpu",
+    use_profile : bool = False
     ):
 
     model.eval()
@@ -44,7 +45,10 @@ def compute_loss(
 
     for batch_idx, (data, target) in enumerate(dataloader):
         with torch.no_grad():
-            output = model(data.to(device))
+            if use_profile:
+                output = model(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
+            else:
+                output = model(data.to(device))
             loss = loss_fn(output, target.to(device))
     
             total_loss += loss.item()
@@ -67,7 +71,8 @@ def compute_permute_feature_importance(
     loss_fn : nn.Module,
     device : str,
     criteria : Literal['loss','score'],
-    save_dir : str
+    save_dir : str,
+    use_profile : bool = False
     ):
     
     # convert get_shot_num variable true
@@ -78,7 +83,7 @@ def compute_permute_feature_importance(
     
     results = []
     
-    loss_orig, score_orig = compute_loss(dataloader, model, loss_fn, device)
+    loss_orig, score_orig = compute_loss(dataloader, model, loss_fn, device, use_profile)
     
     for k in tqdm(range(n_features), desc = "processing for feature importance"):
         
@@ -86,7 +91,7 @@ def compute_permute_feature_importance(
         np.random.shuffle(dataloader.dataset.ts_data[features[k]].values)
         
         # compute the loss
-        loss, score = compute_loss(dataloader, model, loss_fn, device)
+        loss, score = compute_loss(dataloader, model, loss_fn, device, use_profile)
         
         # return the order of the features
         dataloader.dataset.ts_data = data_orig

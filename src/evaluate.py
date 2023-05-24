@@ -17,13 +17,14 @@ def evaluate(
     save_conf : Optional[str] = "./results/confusion_matrix.png",
     save_txt : Optional[str] = None,
     threshold : float = 0.5,
+    use_profile : bool = False,
     ):
 
     test_loss = 0
     test_acc = 0
     test_f1 = 0
-    total_pred = np.array([])
-    total_label = np.array([])
+    total_pred = []
+    total_label = []
 
     if device is None:
         device = torch.device("cuda:0")
@@ -36,7 +37,12 @@ def evaluate(
     for idx, (data, target) in enumerate(test_loader):
         with torch.no_grad():
             optimizer.zero_grad()
-            output = model(data.to(device))
+            
+            if use_profile:
+                output = model(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
+            else:
+                output = model(data.to(device))
+                
             loss = loss_fn(output, target.to(device))
             test_loss += loss.item()
             
@@ -47,11 +53,14 @@ def evaluate(
             
             pred_normal = torch.nn.functional.softmax(output, dim = 1)[:,1].detach()
             
-            total_pred = np.concatenate((total_pred, pred_normal.cpu().numpy().reshape(-1,)))
-            total_label = np.concatenate((total_label, target.cpu().numpy().reshape(-1,)))
+            total_pred.append(pred_normal.view(-1,1))
+            total_label.append(target.view(-1,1))
             
     test_loss /= (idx + 1)
     test_acc /= total_size
+    
+    total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
+    total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
     
     # method 2 : compute f1, auc, roc and classification report
     # data clipping / postprocessing for ignoring nan, inf, too large data
@@ -128,11 +137,12 @@ def evaluate_tensorboard(
     loss_fn : Optional[torch.nn.Module]= None,
     device : Optional[str] = "cpu",
     threshold : float = 0.5,
+    use_profile : bool = False,
     ):
 
     test_loss = 0
-    total_pred = np.array([])
-    total_label = np.array([])
+    total_pred = []
+    total_label = []
 
     if device is None:
         device = torch.device("cuda:0")
@@ -146,16 +156,23 @@ def evaluate_tensorboard(
         with torch.no_grad():
             optimizer.zero_grad()
             
-            output = model(data.to(device))
+            if use_profile:
+                output = model(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
+            else:
+                output = model(data.to(device))
+                
             loss = loss_fn(output, target.to(device))
             test_loss += loss.item()
             
             pred = torch.nn.functional.softmax(output, dim = 1)[:,1].detach()
             total_size += pred.size(0)
             
-            total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
-            total_label = np.concatenate((total_label, target.cpu().numpy().reshape(-1,)))
+            total_pred.append(pred.view(-1,1))
+            total_label.append(target.view(-1,1))
 
+    total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
+    total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
+    
     test_loss /= (idx + 1)
     
     # data clipping / postprocessing for ignoring nan, inf, too large data

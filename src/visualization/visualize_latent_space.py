@@ -9,7 +9,7 @@ from tqdm.auto import tqdm
 from scipy.interpolate import SmoothBivariateSpline
 from typing import Literal
 
-def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA'):
+def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA', use_profile : bool = False):
     model.to(device)
     model.eval()
     
@@ -18,8 +18,13 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
         
     for idx, (data, target) in enumerate(tqdm(dataloader, desc="visualize 2D latent space")):
         with torch.no_grad():
-            latent = model.encode(data.to(device))
-            batch = data.size()[0]
+            if use_profile:
+                latent = model.encode(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
+                batch = data['0D'].size()[0]
+            else:
+                latent = model.encode(data.to(device))
+                batch = data.size()[0]
+                
             total_latent.append(latent.detach().cpu().numpy().reshape(batch,-1))
             total_label = np.concatenate((total_label, target.detach().cpu().numpy().reshape(-1,)), axis = 0)
             
@@ -59,7 +64,7 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
     return
     
 # revised : visualize 2D latent space and decision boundary at once
-def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/decision_boundary_2D_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA'):
+def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/decision_boundary_2D_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA', use_profile : bool = False):
     model.to(device)
     model.eval()
     
@@ -69,12 +74,18 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
         
     for idx, (data, target) in enumerate(tqdm(dataloader, desc="visualize 2D latent space with decision boundary")):
         with torch.no_grad():
-            latent = model.encode(data.to(device))
-            probs = model(data.to(device))
+            if use_profile:
+                latent = model.encode(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
+                batch = data['0D'].size()[0]
+                probs = model(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
+            else:
+                latent = model.encode(data.to(device))
+                batch = data.size()[0]
+                probs = model(data.to(device))
+                
             probs = torch.nn.functional.softmax(probs, dim = 1)[:,0]
             probs = probs.cpu().detach().numpy().tolist()
-        
-            batch = data.size()[0]
+            
             total_latent.append(latent.detach().cpu().numpy().reshape(batch,-1))
             total_label = np.concatenate((total_label, target.detach().cpu().numpy().reshape(-1,)), axis = 0)
             total_probs.extend(probs)
@@ -129,7 +140,7 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
     
     return
     
-def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA'):
+def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA', use_profile : bool = False):
     model.to(device)
     model.eval()
     
@@ -138,8 +149,12 @@ def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device
         
     for idx, (data, target) in enumerate(tqdm(dataloader, desc = "visualize 3D latent space")):
         with torch.no_grad():
-            latent = model.encode(data.to(device))
-            batch = data.size()[0]
+            if use_profile:
+                latent = model.encode(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
+                batch = data['0D'].size()[0]
+            else:
+                latent = model.encode(data.to(device))
+                batch = data.size()[0]
             
             total_latent.append(latent.detach().cpu().numpy().reshape(batch,-1))
             total_label = np.concatenate((total_label, target.detach().cpu().numpy().reshape(-1,)), axis = 0)

@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
 from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
 from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_2D_decision_boundary
-from src.train import train
+from src.train_profile import train
 from src.evaluate import evaluate
 from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
 from src.models.multi_head_model import MultiHeadModel
@@ -233,9 +233,9 @@ if __name__ == "__main__":
         valid_sampler = RandomSampler(valid_data)
         test_sampler = RandomSampler(test_data)
     
-    train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=train_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
-    valid_loader = DataLoader(valid_data, batch_size = args['batch_size'], sampler=valid_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
-    test_loader = DataLoader(test_data, batch_size = args['batch_size'], sampler=test_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
+    train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=train_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last = True)
+    valid_loader = DataLoader(valid_data, batch_size = args['batch_size'], sampler=valid_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last = True)
+    test_loader = DataLoader(test_data, batch_size = args['batch_size'], sampler=test_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last = True)
 
     sample_data, sample_target = next(iter(test_loader))
     sample_output = model(sample_data['0D'].to(device), sample_data['ne'].to(device), sample_data['te'].to(device)).cpu()
@@ -266,7 +266,6 @@ if __name__ == "__main__":
     if args['use_label_smoothing']:
         loss_fn = LabelSmoothingLoss(loss_fn, alpha = args['smoothing'], kl_weight = args['kl_weight'], classes = 2)
     
-    
     # training process
     print("\n======================= training process =======================\n")
     train_loss,  train_acc, train_f1, valid_loss, valid_acc, valid_f1 = train(
@@ -294,7 +293,6 @@ if __name__ == "__main__":
     save_learning_curve = os.path.join(save_dir, "{}_lr_curve.png".format(tag))
     plot_learning_curve(train_loss, valid_loss, train_f1, valid_f1, figsize = (12,6), save_dir = save_learning_curve)
     
-    
     # evaluation process
     print("\n====================== evaluation process ======================\n")
     model.load_state_dict(torch.load(save_best_dir))
@@ -309,7 +307,8 @@ if __name__ == "__main__":
         loss_fn,
         device,
         save_conf = save_conf,
-        save_txt = save_txt
+        save_txt = save_txt,
+        use_profile = True
     )
     
     # compute the feature importance of the variables
@@ -321,9 +320,9 @@ if __name__ == "__main__":
         loss_fn,
         device,
         'loss',
-        os.path.join(save_dir, "{}_feature_importance.png".format(tag))
+        os.path.join(save_dir, "{}_feature_importance.png".format(tag)),
+        use_profile = True,
     )
-    
     
     # Additional analyzation
     print("\n====================== Visualization process ======================\n")
@@ -337,7 +336,10 @@ if __name__ == "__main__":
             model, 
             train_loader,
             device,
-            os.path.join(save_dir, "{}_2D_latent_train.png".format(tag))
+            os.path.join(save_dir, "{}_2D_latent_train.png".format(tag)),
+            2,
+            'PCA',
+            use_profile = True
         )
         
         
@@ -345,7 +347,10 @@ if __name__ == "__main__":
             model, 
             test_loader,
             device,
-            os.path.join(save_dir, "{}_2D_latent_test.png".format(tag))
+            os.path.join(save_dir, "{}_2D_latent_test.png".format(tag)),
+            2,
+            'PCA',
+            use_profile = True
         )
         
         
@@ -353,14 +358,20 @@ if __name__ == "__main__":
             model, 
             train_loader,
             device,
-            os.path.join(save_dir, "{}_2D_decision_boundary_train.png".format(tag))
+            os.path.join(save_dir, "{}_2D_decision_boundary_train.png".format(tag)),
+            2,
+            'PCA',
+            use_profile = True,
         )
         
         visualize_2D_decision_boundary(
             model, 
             test_loader,
             device,
-            os.path.join(save_dir, "{}_2D_decision_boundary_test.png".format(tag))
+            os.path.join(save_dir, "{}_2D_decision_boundary_test.png".format(tag)),
+            2,
+            'PCA',
+            use_profile = True,
         )
         
     except:
@@ -382,5 +393,6 @@ if __name__ == "__main__":
         seq_len = args['seq_len'],
         dist = args['dist'],
         dt = 0.02,
-        scaler = ts_scaler
+        scaler = ts_scaler,
+        use_profile = True,
     )
