@@ -59,8 +59,14 @@ class TransformerEncoder(nn.Module):
             kernel_size += 1
         padding = (kernel_size - 1) // 2
         
-        self.conv = nn.Conv1d(in_channels = n_features, out_channels = n_features, kernel_size = kernel_size, stride = 1, padding = padding)
-        self.encoder_input_layer = nn.Linear(in_features = n_features, out_features = feature_dims - 1)
+        self.projection = nn.Sequential(
+            nn.Conv1d(in_channels = n_features, out_channels = n_features, kernel_size = kernel_size, stride = 1, padding = padding),
+            nn.BatchNorm1d(n_features),
+            nn.GELU(),
+            nn.Conv1d(in_channels = n_features, out_channels = n_features, kernel_size = kernel_size, stride = 1, padding = padding)
+        )
+        
+        self.encoder_input_layer = nn.Linear(in_features = n_features, out_features = feature_dims)
         self.pos_enc = PositionalEncoding(d_model = feature_dims, max_len = max_len)
         
         encoder = nn.TransformerEncoderLayer(
@@ -83,17 +89,10 @@ class TransformerEncoder(nn.Module):
         x = self.noise(x)
         
         # convolution process
-        x = self.conv(x.permute(0,2,1)).permute(0,2,1)
+        x = self.projection(x.permute(0,2,1)).permute(0,2,1)
         
         # linear mapping
-        x = self.encoder_input_layer(x)
-        
-        # time sequence order
-        x_extend = torch.zeros((x.size()[0], x.size()[1], 1 + x.size()[2]), dtype = torch.float, device = x.device)
-        x_extend[:,:,0] = torch.arange(0,x.size()[1])
-        x_extend[:,:,1:] = x
-        x = x_extend
-        
+        x = self.encoder_input_layer(x)        
         x = x.permute(1,0,2)
         
         self.src_mask = self._generate_square_subsequent_mask(len(x), x.device)
