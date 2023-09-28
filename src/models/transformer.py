@@ -3,6 +3,7 @@ import torch.nn as nn
 import math
 from pytorch_model_summary import summary
 from src.models.NoiseLayer import NoiseLayer
+from src.models.FFCN import FFCN
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model : int, max_len : int = 128):
@@ -52,21 +53,23 @@ class TransformerEncoder(nn.Module):
         self.max_len = max_len
         self.feature_dims = feature_dims
         
-        self.noise = NoiseLayer(mean = 0, std = 4e-3)
+        self.noise = NoiseLayer(mean = 0, std = 1e-3)
         
         if kernel_size // 2 == 0:
             print("kernel sholud be odd number")
             kernel_size += 1
         padding = (kernel_size - 1) // 2
         
+        # Fast fourier convolution
         self.projection = nn.Sequential(
-            nn.Conv1d(in_channels = n_features, out_channels = n_features, kernel_size = kernel_size, stride = 1, padding = padding),
-            nn.BatchNorm1d(n_features),
+            FFCN(in_channels=n_features, out_channels=feature_dims, kernel_size = kernel_size, padding = padding, stride = 1, groups = 1, ndim = 1),
+            nn.BatchNorm1d(feature_dims),
             nn.GELU(),
-            nn.Conv1d(in_channels = n_features, out_channels = n_features, kernel_size = kernel_size, stride = 1, padding = padding)
+            FFCN(in_channels=feature_dims, out_channels=feature_dims, kernel_size = kernel_size, padding = padding, stride = 1, groups = 1, ndim = 1),
+            nn.BatchNorm1d(feature_dims),
+            nn.GELU(),
         )
         
-        self.encoder_input_layer = nn.Linear(in_features = n_features, out_features = feature_dims)
         self.pos_enc = PositionalEncoding(d_model = feature_dims, max_len = max_len)
         
         encoder = nn.TransformerEncoderLayer(
@@ -80,6 +83,7 @@ class TransformerEncoder(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(encoder, num_layers=n_layers)
         self.connector = nn.Sequential(
             nn.Linear(feature_dims, feature_dims),
+            nn.LayerNorm(feature_dims),
             nn.GELU()
         )
         
@@ -91,8 +95,7 @@ class TransformerEncoder(nn.Module):
         # convolution process
         x = self.projection(x.permute(0,2,1)).permute(0,2,1)
         
-        # linear mapping
-        x = self.encoder_input_layer(x)        
+        # mapping for transformer module      
         x = x.permute(1,0,2)
         
         self.src_mask = self._generate_square_subsequent_mask(len(x), x.device)
@@ -131,7 +134,7 @@ class Transformer(nn.Module):
         self.encoder = TransformerEncoder(n_features, kernel_size, feature_dims, max_len, n_layers, n_heads, dim_feedforward, dropout)
         self.classifier = nn.Sequential(
             nn.Linear(feature_dims, cls_dims),
-            nn.BatchNorm1d(cls_dims),
+            nn.LayerNorm(cls_dims),
             GELU(),
             nn.Linear(cls_dims, n_classes)
         )
@@ -149,5 +152,5 @@ class Transformer(nn.Module):
         return x
     
     def summary(self):
-        sample_x = torch.zeros((2, self.max_len, self.n_features))
-        summary(self, sample_x, batch_size = 2, show_input = True, print_summary=True)
+        sample_x = torch.zeros((1, self.max_len, self.n_features))
+        summary(self, sample_x, batch_size = 1, show_input = True, print_summary=True)

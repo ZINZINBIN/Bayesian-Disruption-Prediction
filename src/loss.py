@@ -25,7 +25,7 @@ class FocalLoss(nn.Module):
     def compute_focal_loss(self, inputs:torch.Tensor, gamma:float, alpha : torch.Tensor):
         p = torch.exp(-inputs)
         loss = alpha * (1-p) ** gamma * inputs
-        return loss.sum()
+        return loss.mean()
 
     def forward(self, input : torch.Tensor, target : torch.Tensor):
         weight = self.weight.to(input.device)
@@ -66,7 +66,7 @@ class LDAMLoss(nn.Module):
 
         output = torch.where(idx, x_m, x)
 
-        return F.cross_entropy(self.s * output, target, weight = self.weight, reduction = 'sum')
+        return F.cross_entropy(self.s * output, target, weight = self.weight, reduction = 'mean')
     
 class CELoss(nn.Module):
     def __init__(self, weight : Optional[torch.Tensor] = None):
@@ -78,7 +78,7 @@ class CELoss(nn.Module):
         self.weight = weight
     
     def forward(self, x : torch.Tensor, target : torch.Tensor):
-        return F.cross_entropy(x, target, weight = self.weight, reduction = 'sum')
+        return F.cross_entropy(x, target, weight = self.weight, reduction = 'mean')
     
 # Label smoothing
 # Reference : https://cvml.tistory.com/9
@@ -101,5 +101,5 @@ class LabelSmoothingLoss(nn.Module):
             true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
         
         log_p = x.log_softmax(dim = self.dim)
-        kl_loss = torch.sum(true_dist * log_p, dim = self.dim).sum()
+        kl_loss = torch.sum(true_dist * log_p, dim = self.dim).mean()
         return loss + kl_loss * self.kl_weight

@@ -3,30 +3,24 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, IncrementalPCA
 from sklearn.manifold import TSNE
 from tqdm.auto import tqdm
 from scipy.interpolate import SmoothBivariateSpline
 from typing import Literal
 
-def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA', use_profile : bool = False):
+def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 8, method : Literal['PCA', 'tSNE'] = 'PCA'):
     model.to(device)
     model.eval()
     
     total_label = np.array([])
     total_latent = []
         
-    for idx, (data, target) in enumerate(tqdm(dataloader, desc="visualize 2D latent space")):
+    for idx, data in enumerate(tqdm(dataloader, desc="visualize 2D latent space")):
         with torch.no_grad():
-            if use_profile:
-                latent = model.encode(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
-                batch = data['0D'].size()[0]
-            else:
-                latent = model.encode(data.to(device))
-                batch = data.size()[0]
-                
-            total_latent.append(latent.detach().cpu().numpy().reshape(batch,-1))
-            total_label = np.concatenate((total_label, target.detach().cpu().numpy().reshape(-1,)), axis = 0)
+            latent = model.encode(data)   
+            total_latent.append(latent.detach().cpu().numpy())
+            total_label = np.concatenate((total_label, data['label'].detach().cpu().numpy().reshape(-1,)), axis = 0)
             
         if limit_iters >0 and idx + 1 > limit_iters:
             break
@@ -37,11 +31,10 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
     color = np.array(['#1f77b4', '#ff7f0e'])
     label  = np.array(['disruption','normal'])
     
-    
     print("Dimension reduction process : start | latent vector : ({}, {})".format(total_latent.shape[0], total_latent.shape[1]))
     if method == 'PCA':
         # using PCA
-        pca = PCA(n_components=2, random_state=42)
+        pca = IncrementalPCA(n_components=2)
         total_latent = pca.fit_transform(total_latent)
     else:
         # using t-SNE
@@ -64,7 +57,7 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
     return
     
 # revised : visualize 2D latent space and decision boundary at once
-def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/decision_boundary_2D_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA', use_profile : bool = False):
+def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/decision_boundary_2D_space.png', limit_iters : int = 8, method : Literal['PCA', 'tSNE'] = 'PCA'):
     model.to(device)
     model.eval()
     
@@ -72,22 +65,17 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
     total_probs = []
     total_latent = []
         
-    for idx, (data, target) in enumerate(tqdm(dataloader, desc="visualize 2D latent space with decision boundary")):
+    for idx, data in enumerate(tqdm(dataloader, desc="visualize 2D latent space with decision boundary")):
         with torch.no_grad():
-            if use_profile:
-                latent = model.encode(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
-                batch = data['0D'].size()[0]
-                probs = model(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
-            else:
-                latent = model.encode(data.to(device))
-                batch = data.size()[0]
-                probs = model(data.to(device))
-                
+            
+            latent = model.encode(data)
+            probs = model(data)
+  
             probs = torch.nn.functional.softmax(probs, dim = 1)[:,0]
             probs = probs.cpu().detach().numpy().tolist()
             
-            total_latent.append(latent.detach().cpu().numpy().reshape(batch,-1))
-            total_label = np.concatenate((total_label, target.detach().cpu().numpy().reshape(-1,)), axis = 0)
+            total_latent.append(latent.detach().cpu().numpy())
+            total_label = np.concatenate((total_label, data['label'].detach().cpu().numpy().reshape(-1,)), axis = 0)
             total_probs.extend(probs)
             
         if limit_iters >0 and idx + 1 > limit_iters:
@@ -102,7 +90,7 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
     print("Dimension reduction process : start | latent vector : ({}, {})".format(total_latent.shape[0], total_latent.shape[1]))
     if method == 'PCA':
         # using PCA
-        pca = PCA(n_components=2, random_state=42)
+        pca = IncrementalPCA(n_components=2)
         total_latent = pca.fit_transform(total_latent)
     else:
         # using t-SNE
@@ -140,24 +128,18 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
     
     return
     
-def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'PCA', use_profile : bool = False):
+def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 8, method : Literal['PCA', 'tSNE'] = 'PCA'):
     model.to(device)
     model.eval()
     
     total_label = np.array([])
     total_latent = []
         
-    for idx, (data, target) in enumerate(tqdm(dataloader, desc = "visualize 3D latent space")):
+    for idx, data in enumerate(tqdm(dataloader, desc = "visualize 3D latent space")):
         with torch.no_grad():
-            if use_profile:
-                latent = model.encode(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
-                batch = data['0D'].size()[0]
-            else:
-                latent = model.encode(data.to(device))
-                batch = data.size()[0]
-            
-            total_latent.append(latent.detach().cpu().numpy().reshape(batch,-1))
-            total_label = np.concatenate((total_label, target.detach().cpu().numpy().reshape(-1,)), axis = 0)
+            latent = model.encode(data)
+            total_latent.append(latent.detach().cpu().numpy())
+            total_label = np.concatenate((total_label, data['label'].detach().cpu().numpy().reshape(-1,)), axis = 0)
             
         if limit_iters > 0 and idx + 1 > limit_iters:
             break
@@ -171,7 +153,7 @@ def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device
     print("Dimension reduction process : start | latent vector : ({}, {})".format(total_latent.shape[0], total_latent.shape[1]))
     if method == 'PCA':
         # using PCA
-        pca = PCA(n_components=3, random_state=42)
+        pca = IncrementalPCA(n_components=3)
         total_latent = pca.fit_transform(total_latent)
     else:
         # using t-SNE

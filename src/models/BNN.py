@@ -196,7 +196,7 @@ class BayesianTransformer(nn.Module):
         self.encoder = TransformerEncoder(n_features, kernel_size, feature_dims, max_len, n_layers, n_heads, dim_feedforward, dropout)
         self.classifier = nn.Sequential(
             BayesLinear(feature_dims, cls_dims, prior_pi, prior_sigma1, prior_sigma2),
-            nn.BatchNorm1d(cls_dims),
+            nn.LayerNorm(cls_dims),
             GELU(),
             BayesLinear(cls_dims, n_classes, prior_pi, prior_sigma1, prior_sigma2),
         )
@@ -212,8 +212,8 @@ class BayesianTransformer(nn.Module):
         return x
 
     def summary(self):
-        sample_x = torch.zeros((2, self.encoder.max_len, self.encoder.n_features))
-        summary(self, sample_x, batch_size = 2, show_input = True, print_summary=True)
+        sample_x = torch.zeros((1, self.encoder.max_len, self.encoder.n_features))
+        summary(self, sample_x, batch_size = 1, show_input = True, print_summary=True)
         
     def predict_per_sample(self, x : torch.Tensor):
         with torch.no_grad():
@@ -224,52 +224,71 @@ class BayesianTransformer(nn.Module):
             return outputs
     
 # Uncertaintiy computation
-def compute_ensemble_probability(model : BayesianTransformer, input : torch.Tensor, device : str = 'cpu', n_samples : int = 8):
+def compute_ensemble_probability(model : nn.Module, input : Dict[str, torch.Tensor], device : str = 'cpu', n_samples : int = 8):
     '''
         Compute the probability of each case with n_samples of the predictive conditional probability
         Input : (1,T,D)
         Output : (n_samples, 2) : n_samples of [probs_normal, probs_disrupt]
     '''
+
     model.eval()
     model.to(device)
     
-    if input.ndim == 2:
-        input = input.unsqueeze(0)
-        
-    inputs = input.repeat(n_samples, 1, 1)
-    
+    '''
     # 배치 단위로 불확실성 계산하는 코드 : 추후 추가 예정
-    outputs = model.predict_per_sample(inputs.to(device))
+    for key in input.keys():
+        if input[key].ndim == 2:
+            input[key] = input[key].unsqueeze(0)
+            input[key] = input[key].repeat(n_samples, 1, 1)
+    
+    outputs = model.predict_per_sample(input)
     probs = torch.nn.functional.softmax(outputs, dim = 1)
+    '''
     
     # 일단 여러번 연산해서 얻는 구조로 진행
-    '''
+    for key in input.keys():
+        if input[key].ndim == 2:
+            input[key] = input[key].unsqueeze(0)
+    
     probs = torch.zeros((n_samples, 2), device = device)
+    
     for idx in range(n_samples):
-        output = model(inputs[idx].unsqueeze(0).to(device))
+        output = model(input)
         prob = torch.nn.functional.softmax(output, dim = 1)
         probs[idx,:] = prob
-    '''
-    
+        
     probs = probs.detach().cpu().numpy() 
     
     return probs
 
-def compute_uncertainty_per_data(model : nn.Module, input : torch.Tensor, device : str = "cpu", n_samples : int = 8, normalized : bool = False):
-    
-    if input.ndim == 2:
-        input = input.unsqueeze(0)
-        
-    inputs = input.repeat(n_samples, 1, 1)
+def compute_uncertainty_per_data(model : nn.Module, input : Dict[str, torch.Tensor], device : str = "cpu", n_samples : int = 8, normalized : bool = False):
     
     model.eval()
     model.to(device)
-    outputs = model(inputs.to(device))
+    '''
+    for key in input.keys():
+        if input[key].ndim == 2:
+            input[key] = input[key].unsqueeze(0)
+            input[key] = input[key].repeat(n_samples, 1, 1)
+    
+    outputs = model(input)
+    probs = torch.nn.functional.softmax(outputs, dim = 1)
+    '''
+    
+    for key in input.keys():
+        if input[key].ndim == 2:
+            input[key] = input[key].unsqueeze(0)
+    
+    probs = torch.zeros((n_samples, 2), device = device)
+    outputs = torch.zeros((n_samples, 2), device = device)
+    
+    for idx in range(n_samples):
+        output = model(input)
+        outputs[idx,:] = output
     
     if normalized:
         probs = torch.nn.functional.softplus(outputs, dim = 1)
         probs = probs / torch.sum(probs, dim = 1).unsqueeze(1)
-        
     else:
         probs = torch.nn.functional.softmax(outputs, dim = 1)
         

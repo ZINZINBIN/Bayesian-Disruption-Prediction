@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 import cv2, os, glob2, random
 import pandas as pd
 import numpy as np
-from typing import Optional, List, Literal, Union, Tuple
+from typing import Optional, List, Literal, Union, Tuple, Dict
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import torchvision.transforms as T
@@ -56,59 +56,80 @@ def deterministic_split(shot_list : List, test_size : float = 0.2):
 
 
 # train-test split for 0D data models
-def preparing_0D_dataset(filepath : str = "./dataset/KSTAR_Disruption_ts_data_extend.csv", random_state : int = STATE_FIXED, ts_cols : Optional[List] = None, scaler : Literal['Robust', 'Standard', 'MinMax', 'None'] = 'Robust'):
+def preparing_0D_dataset(
+    filepath:Dict[str, str],
+    random_state : Optional[int] = STATE_FIXED, 
+    scaler : Literal['Robust', 'Standard', 'MinMax', 'None'] = 'Robust', 
+    test_shot : Optional[int] = 21310
+    ):
     
-    # preparing 0D data for use
-    df = pd.read_csv(filepath).reset_index()
-
-    # nan interpolation
-    df.interpolate(method = 'linear', limit_direction = 'forward')
-
-    # float type
-    if ts_cols is None:
-        for col in df.columns:
-            df[col] = df[col].astype(np.float32)
-    else:
-        for col in ts_cols:
-            df[col] = df[col].astype(np.float32)
-
+    data_disrupt = pd.read_csv(filepath['disrupt'], encoding = "euc-kr")
+    data_efit = pd.read_csv(filepath['efit'])
+    data_ece = pd.read_csv(filepath['ece'])
+    data_diag = pd.read_csv(filepath['diag'])
+    
     # train / valid / test data split
-    shot_list = np.unique(df.shot.values)
+    shot_list = np.unique(data_disrupt.shot.values)
+    
+    if test_shot is not None:
+        shot_list = np.array([shot for shot in shot_list if int(shot) != test_shot])
 
     # stochastic train_test_split
-    # shot_train, shot_test = train_test_split(shot_list, test_size = 0.2, random_state = random_state)
-    # shot_train, shot_valid = train_test_split(shot_train, test_size = 0.2, random_state = random_state)
-    
+    if random_state is not None:
+        shot_train, shot_test = train_test_split(shot_list, test_size = 0.2, random_state = random_state)
+        shot_train, shot_valid = train_test_split(shot_train, test_size = 0.2, random_state = random_state)
+    else:
     # deterministic train_test_split
-    shot_train, shot_test = deterministic_split(shot_list, test_size = 0.2)
-    shot_train, shot_valid = deterministic_split(shot_train, test_size = 0.2)
+        shot_train, shot_test = deterministic_split(shot_list, test_size = 0.2)
+        shot_train, shot_valid = deterministic_split(shot_train, test_size = 0.2)
     
-    df_train = pd.DataFrame()
-    df_valid = pd.DataFrame()
-    df_test = pd.DataFrame()
-
-    for shot in shot_train:
-        df_train = pd.concat([df_train, df[df.shot == shot]], axis = 0)
-
-    for shot in shot_valid:
-        df_valid = pd.concat([df_valid, df[df.shot == shot]], axis = 0)
-
-    for shot in shot_test:
-        df_test = pd.concat([df_test, df[df.shot == shot]], axis = 0)
+    train = {
+        "efit": data_efit[data_efit.shot.isin(shot_train)],
+        "ece":data_ece[data_ece.shot.isin(shot_train)],
+        "diag":data_diag[data_diag.shot.isin(shot_train)],
+        "disrupt":data_disrupt[data_disrupt.shot.isin(shot_train)],
+    }
+    
+    valid = {
+        "efit": data_efit[data_efit.shot.isin(shot_valid)],
+        "ece":data_ece[data_ece.shot.isin(shot_valid)],
+        "diag":data_diag[data_diag.shot.isin(shot_valid)],
+        "disrupt":data_disrupt[data_disrupt.shot.isin(shot_valid)],
+    }
+    
+    test = {
+        "efit": data_efit[data_efit.shot.isin(shot_test)],
+        "ece":data_ece[data_ece.shot.isin(shot_test)],
+        "diag":data_diag[data_diag.shot.isin(shot_test)],
+        "disrupt":data_disrupt[data_disrupt.shot.isin(shot_test)],
+    }
         
     if scaler == 'Robust':
-        scaler = RobustScaler()
+        scaler = {
+            "efit":RobustScaler(),
+            "ece":RobustScaler(),
+            "diag":RobustScaler(),
+        }
     elif scaler == 'Standard':
-        scaler = StandardScaler()
+        scaler = {
+            "efit":StandardScaler(),
+            "ece":StandardScaler(),
+            "diag":StandardScaler(),
+        }
     elif scaler == 'MinMax':
-        scaler = MinMaxScaler()
+        scaler = {
+            "efit":MinMaxScaler(),
+            "ece":MinMaxScaler(),
+            "diag":MinMaxScaler(),
+        }
     else:
         scaler = None
     
     if scaler is not None:
-        scaler.fit(df_train[ts_cols].values)
+        for key in scaler.keys():
+            scaler[key].fit(train[key][config.COLUMN_NAME_SCALER[key]].values)
 
-    return df_train, df_valid, df_test, scaler
+    return train, valid, test, scaler
     
 
 TS_COLS = [
@@ -118,153 +139,202 @@ TS_COLS = [
     '\\TS_NE_CORE_AVG', '\\TS_TE_CORE_AVG'
 ]
 
-# 0D dataset for generating probability curve
-class DatasetFor0D(Dataset):
+# Multi sginal dataset for generating probability curve
+class MultiSignalDataset(Dataset):
     def __init__(
         self, 
-        ts_data : pd.DataFrame, 
-        cols : List, 
-        seq_len : int = 16, 
-        dist:int = 3, 
-        dt : float = 0.025,
-        scaler : Optional[BaseEstimator] = None,
+        data_disrupt : pd.DataFrame, 
+        data_efit:pd.DataFrame, 
+        data_ece:pd.DataFrame, 
+        data_diag:pd.DataFrame, 
+        seq_len_efit:int = 20, 
+        seq_len_ece:int = 100,
+        seq_len_diag:int = 100, 
+        dist:int = 4,
+        dt:float = 0.01, 
+        scaler_efit=None,
+        scaler_ece=None,
+        scaler_diag=None, 
+        mode : Literal['TQ', 'CQ'] = 'CQ', 
         ):
         
-        self.ts_data = ts_data
-        self.seq_len = seq_len
-        self.dt = dt
-        self.cols = cols
-        self.dist = dist
-        self.indices = [idx for idx in range(0, len(self.ts_data) - seq_len - dist)]
+        # KSTAR dataset
+        self.data_disrupt = data_disrupt
+        self.data_efit = data_efit
+        self.data_ece = data_ece
+        self.data_diag = data_diag
         
-        self.scaler = scaler
+        # input data configuration
+        self.seq_len_efit = seq_len_efit
+        self.seq_len_ece = seq_len_ece
+        self.seq_len_diag = seq_len_diag
+        self.dt = dt
+    
+        # prediction task
+        self.dist = dist
+        self.mode = mode
+        
+        # scaler
+        self.scaler_efit = scaler_efit
+        self.scaler_ece = scaler_ece
+        self.scaler_diag = scaler_diag
+        
+        # dataloader setup
+        self.indices = []
+        self.time_slice = []
+        self.labels = []
+        self.shot_num = []
+        self.shot_list = []
+        self.get_shot_num = False
+        self.n_classes = 2
+        
+        # generate indices
+        self.generate_indices()
+        
+        # preprocessing
+        self.preprocessing()
             
-        if self.scaler is not None:
-            self.ts_data[cols] = self.scaler.fit_transform(self.ts_data[cols].values)
-   
+    def generate_indices(self):
+        tTQend = self.data_disrupt.t_tmq.values[0]
+        tftsrt = self.data_disrupt.t_flattop_start.values[0]
+        tipminf = self.data_disrupt.t_ip_min_fault.values[0]
+            
+        if self.mode == 'TQ':
+            t_disrupt = tTQend
+        elif self.mode =='CQ':
+            t_disrupt = tipminf
+            
+        idx_efit = int(tftsrt / self.dt) // 5
+        idx_ece = int(tftsrt / self.dt)
+        idx_diag = int(tftsrt / self.dt)
+            
+        idx_efit_last = len(self.data_efit.index)
+        idx_ece_last = len(self.data_ece.index)
+        idx_diag_last = len(self.data_diag.index)
+        
+        t_max = self.data_ece['time'].values[-1]
+        
+        while(idx_ece < idx_ece_last or idx_diag < idx_diag_last):
+                
+            t_efit = self.data_efit.iloc[idx_efit]['time']
+            t_ece = self.data_ece.iloc[idx_ece]['time']
+            t_diag = self.data_diag.iloc[idx_diag]['time']
+            
+            assert abs(t_diag - t_ece) <= 0.02, "Dignostic data and ECE data are not consistent"
+                
+            # synchronize t_efit and t_ece
+            if t_efit <= t_ece - 0.05:
+                t_diff = t_ece - t_efit
+                idx_efit += int(round(t_diff / self.dt / 5, 1))
+                
+            if t_ece >= tftsrt and t_ece <= t_max - self.dt * (self.seq_len_ece + self.dist) * 1.25:
+                indx_ece = self.data_ece.index.values[idx_ece]
+                indx_efit = self.data_efit.index.values[idx_efit]
+                indx_diag = self.data_diag.index.values[idx_diag]
+                
+                self.time_slice.append(t_ece + self.dt * self.dist + self.seq_len_ece * self.dt)
+                self.indices.append((indx_efit, indx_ece, indx_diag))
+                idx_ece += 5
+                idx_diag += 5
+            
+            elif t_ece < tftsrt:
+                idx_ece += 5
+                idx_diag += 5
+                
+            elif t_ece > t_max - self.dt * (self.seq_len_ece + self.dist) * 1.25:
+                break
+            
+            else:
+                idx_ece += 5
+                idx_diag += 5
+                
+    def preprocessing(self):
+        
+        if self.scaler_efit is not None:
+            self.data_efit[config.EFIT + config.EFIT_FE] = self.scaler_efit.transform(self.data_efit[config.EFIT + config.EFIT_FE])
+            
+        if self.scaler_ece is not None:
+            self.data_ece[config.ECE] = self.scaler_ece.transform(self.data_ece[config.ECE])
+        
+        if self.scaler_diag is not None:
+            self.data_diag[config.DIAG] = self.scaler_diag.transform(self.data_diag[config.DIAG])
+            
+        print("# Inference | preprocessing the data")
+        
     def __len__(self):
         return len(self.indices)
 
     def __getitem__(self, idx : int):
-        return self.get_data(idx)
-
-    def get_data(self, idx : int):
-        idx_srt = self.indices[idx]
-        idx_end = idx_srt + self.seq_len
-        
-        data = self.ts_data[self.cols].iloc[idx_srt + 1: idx_end + 1].values
-        data = torch.from_numpy(data)
-        return data
-    
-class DatasetForProfile(Dataset):
-    def __init__(self, ts_data : pd.DataFrame,  seq_len : int = 21, cols : List = [], dist:int = 3, dt : float = 1.0 / 210 * 4, scaler = None,  n_points : int = 128):
-        self.ts_data = ts_data
-        self.seq_len = seq_len
-        self.dt = dt
-        self.cols = cols
-        self.dist = dist # distance
-
-        self.indices = [idx for idx in range(0, len(self.ts_data) - seq_len - dist)]
-        
-        self.scaler = scaler
-        self.n_points = n_points
-        
-        self.preprocessing()
-        
-    def preprocessing(self):
-        
-        # profile generation : Te and Ne
-        self.ne_profile = np.zeros((len(self.ts_data), self.n_points))
-        self.te_profile = np.zeros((len(self.ts_data), self.n_points))
-        
-        from src.profile import get_profile
-        tes = []
-        nes = []
-        
-        for t in self.ts_data.time:
-            _, te = get_profile(self.ts_data, t, radius = config.RADIUS, cols_core = config.TS_TE_CORE_COLS, cols_edge = config.TS_TE_EDGE_COLS, n_points = self.n_points)
-            _, ne = get_profile(self.ts_data, t, radius = config.RADIUS, cols_core = config.TS_NE_CORE_COLS, cols_edge = config.TS_NE_EDGE_COLS, n_points = self.n_points)
-            tes.append(te.reshape(-1,1))
-            nes.append(ne.reshape(-1,1))
-    
-        self.ne_profile = np.concatenate(nes, axis = 1).transpose(1,0)
-        self.te_profile = np.concatenate(tes, axis = 1).transpose(1,0)
-        
-    def __getitem__(self, idx:int):
-        idx_srt = self.indices[idx]
-        idx_end = idx_srt + self.seq_len
-        
-        # 0D data
-        data_0D = self.ts_data[self.cols].iloc[idx_srt:idx_end].values
-        data_0D = torch.from_numpy(data_0D).float()
-        
-        # profile data
-        te_profile = self.te_profile[idx_srt:idx_end,:]
-        te_profile = torch.from_numpy(te_profile).float().unsqueeze(0)
-        
-        ne_profile = self.ne_profile[idx_srt:idx_end,:]
-        ne_profile = torch.from_numpy(ne_profile).float().unsqueeze(0)
+        indx_efit, indx_ece, indx_diag = self.indices[idx]
+        data_efit = self.data_efit.loc[indx_efit + 1:indx_efit + self.seq_len_efit, config.EFIT + config.EFIT_FE].values.reshape(-1, self.seq_len_efit)
+        data_ece = self.data_ece.loc[indx_ece + 1:indx_ece + self.seq_len_ece, config.ECE].values.reshape(-1, self.seq_len_ece)
+        data_diag = self.data_diag.loc[indx_diag + 1:indx_diag + self.seq_len_diag, config.DIAG].values.reshape(-1, self.seq_len_diag)
+ 
+        data_efit = torch.from_numpy(data_efit).float()
+        data_ece = torch.from_numpy(data_ece).float()
+        data_diag = torch.from_numpy(data_diag).float()
         
         data = {
-            "0D" : data_0D,
-            "te" : te_profile,
-            "ne" : ne_profile,
+            "efit":data_efit,
+            "ece":data_ece,
+            "diag":data_diag,
         }
-        return data
     
-    def __len__(self):
-        return len(self.indices)
+        return data
 
 def generate_prob_curve_from_0D(
-    model : torch.nn.Module, 
-    device : str = "cpu", 
-    save_dir : Optional[str] = "./results/disruption_probs_curve.png",
-    ts_data_dir : Optional[str] = "./dataset/KSTAR_Disruption_ts_data_extend.csv",
-    ts_cols : Optional[List] = None,
-    shot_list_dir : Optional[str] = './dataset/KSTAR_Disruption_Shot_List_extend.csv',
-    shot_num : Optional[int] = None,
-    seq_len : Optional[int] = None,
-    dist : Optional[int] = None,
-    dt : Optional[float] = None,
-    scaler : Optional[BaseEstimator] = None,
-    use_profile : bool = False,
+        filepath : Dict[str, str],
+        model : torch.nn.Module, 
+        device : str = "cpu",
+        save_dir : Optional[str] = "./results/disruption_probs_curve.png",
+        shot_num : Optional[int] = None,
+        seq_len_efit:int = 20, 
+        seq_len_ece:int = 100,
+        seq_len_diag:int = 100, 
+        dist : Optional[int] = None,
+        dt : Optional[float] = None,
+        data_disrupt:Optional[pd.DataFrame] = None,
+        data_efit:Optional[pd.DataFrame] = None,
+        data_ece:Optional[pd.DataFrame] = None,
+        data_diag:Optional[pd.DataFrame] = None, 
+        mode : Literal['TQ', 'CQ'] = 'CQ', 
     ):
-    
+     
     # obtain tTQend, tipmin and tftsrt
-    shot_list_dir = pd.read_csv(shot_list_dir, encoding = "euc-kr")
-    tTQend = shot_list_dir[shot_list_dir.shot == shot_num].t_tmq.values[0]
-    tftsrt = shot_list_dir[shot_list_dir.shot == shot_num].t_flattop_start.values[0]
-    tipminf = shot_list_dir[shot_list_dir.shot == shot_num].t_ip_min_fault.values[0]
+    _, _, _, scaler_list = preparing_0D_dataset(filepath, random_state = STATE_FIXED, scaler = 'Robust', test_shot = shot_num)
 
-    # input data generation
-    ts_data = pd.read_csv(ts_data_dir).reset_index()
-
-    for col in ts_cols:
-        ts_data[col] = ts_data[col].astype(np.float32)
-
-    ts_data.interpolate(method = 'linear', limit_direction = 'forward')
+    data_disrupt = pd.read_csv(filepath['disrupt'], encoding = "euc-kr")
+    data_efit = pd.read_csv(filepath['efit'])
+    data_ece = pd.read_csv(filepath['ece'])
+    data_diag = pd.read_csv(filepath['diag'])
     
-    ts_data_0D = ts_data[ts_data['shot'] == shot_num]
+    tTQend = data_disrupt[data_disrupt.shot == shot_num].t_tmq.values[0]
+    tftsrt = data_disrupt[data_disrupt.shot == shot_num].t_flattop_start.values[0]
+    tipminf = data_disrupt[data_disrupt.shot == shot_num].t_ip_min_fault.values[0]
     
-    t = ts_data_0D.time
-    ip = ts_data_0D['\\ipmhd']
-    kappa = ts_data_0D['\\kappa']
-    betap = ts_data_0D['\\betap']
-    li = ts_data_0D['\\li']
-    q95 = ts_data_0D['\\q95']
-    tritop = ts_data_0D['\\tritop']
-    tribot = ts_data_0D['\\tribot']
-    ne = ts_data_0D['\\ne_inter01']
-    W_tot = ts_data_0D['\\WTOT_DLM03']
-    te_core = ts_data_0D['\\TS_TE_CORE_AVG']
-    te_edge = ts_data_0D['\\TS_TE_EDGE_AVG']
-    ne_ng_ratio = ts_data_0D['\\ne_nG_ratio']
+    data_efit = data_efit[data_efit.shot == shot_num]
+    data_ece = data_ece[data_ece.shot == shot_num]
+    data_diag = data_diag[data_diag.shot == shot_num]
     
-    # video data
-    if use_profile:
-        dataset = DatasetForProfile(ts_data_0D, seq_len, ts_cols, dist, dt, scaler, n_points = 128)
-    else:
-        dataset = DatasetFor0D(ts_data_0D, ts_cols, seq_len, dist, dt, scaler)
+    plot_efit = data_efit.copy(deep = True)
+    plot_ece = data_ece.copy(deep = True)
+    plot_diag = data_diag.copy(deep = True)
+    
+    dataset = MultiSignalDataset(
+        data_disrupt,
+        data_efit,
+        data_ece,
+        data_diag,
+        seq_len_efit,
+        seq_len_ece,
+        seq_len_diag,
+        dist,
+        dt,
+        scaler_list['efit'],
+        scaler_list['ece'],
+        scaler_list['diag'],
+        mode
+    )
 
     prob_list = []
     is_disruption = []
@@ -277,11 +347,11 @@ def generate_prob_curve_from_0D(
     for idx in tqdm(range(dataset.__len__())):
         with torch.no_grad():
             data = dataset.__getitem__(idx)
-            if use_profile:
-                output = model(data['0D'].to(device).unsqueeze(0), data['ne'].to(device).unsqueeze(0), data['te'].to(device).unsqueeze(0))
-            else:
-                output = model(data.to(device).unsqueeze(0))
-                
+            
+            for key in data.keys():
+                data[key] = data[key].unsqueeze(0)
+            
+            output = model(data)
             probs = torch.nn.functional.softmax(output, dim = 1)[:,0]
             probs = probs.cpu().detach().numpy().tolist()
 
@@ -292,26 +362,15 @@ def generate_prob_curve_from_0D(
             is_disruption.extend(
                 torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1].cpu().detach().numpy().tolist()
             )
-            
-    interval = 1
-    fps = int(1 / dt)
+  
+    n_ftsrt = int(dataset.time_slice[0] // dt)
+    time_slice = [v for v in dataset.time_slice]
+    time_slice = [dt * i + dt * dataset.seq_len_ece + dist * dt for i in range(0, n_ftsrt)] + time_slice 
+    prob_list = [0] * n_ftsrt + prob_list 
     
-    prob_list = [0] * (seq_len + dist - 1 + int((tftsrt - dt * 4) / dt)) + prob_list + [0] * int(0.5 / dt)
-    
-    # correction for startup peaking effect : we will soon solve this problem
-    for idx, prob in enumerate(prob_list):
-        
-        if idx < fps * 1 and prob >= 0.5:
-            prob_list[idx] = 0
-            
-    from scipy.interpolate import interp1d
-    prob_x = np.linspace(0, len(prob_list) * interval, num = len(prob_list), endpoint = True)
-    prob_y = np.array(prob_list)
-    f_prob = interp1d(prob_x, prob_y, kind = 'cubic')
-    prob_list = f_prob(np.linspace(0, len(prob_list) * interval, num = len(prob_list) * interval, endpoint = False))
-    
-    time_x = np.arange(0, len(prob_list)) * (1/fps)
-    
+    print("time_slice : ", len(time_slice))
+    print("prob_list : ", len(prob_list))
+
     print("\n(Info) flat-top : {:.3f}(s) | thermal quench : {:.3f}(s) | current quench : {:.3f}(s)\n".format(tftsrt, tTQend, tipminf))
     
     t_disrupt = tTQend
@@ -320,121 +379,73 @@ def generate_prob_curve_from_0D(
     # plot the disruption probability with plasma status
     fig = plt.figure(figsize = (21, 8))
     fig.suptitle("Disruption prediction with shot : {}".format(shot_num))
-    gs = GridSpec(nrows = 4, ncols = 4)
+    gs = GridSpec(nrows = 4, ncols = 3)
     
-    quantile = [0, 0.25, 0.5, 0.75, 1.0, 1.25]
-    t_quantile = [q * t_current for q in quantile]
-        
-    # kappa
-    ax_kappa = fig.add_subplot(gs[0,0])
-    ax_kappa.plot(t, kappa, label = 'kappa')
-    ax_kappa.text(0.85, 0.8, "kappa", transform = ax_kappa.transAxes)
-    ax_kappa.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
-    ax_kappa.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-
-    # tri top
-    ax_tri_top = fig.add_subplot(gs[1,0])
-    ax_tri_top.plot(t, tritop, label = 'tri-top')
-    ax_tri_top.text(0.85, 0.8, "tri_top", transform = ax_tri_top.transAxes)
-    ax_tri_top.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
-    ax_tri_top.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    
-    # tri bot
-    ax_tri_bot = fig.add_subplot(gs[2,0])
-    ax_tri_bot.plot(t, tribot, label = 'tri-bot')
-    ax_tri_bot.text(0.85, 0.8, "tri_bot", transform = ax_tri_bot.transAxes)
-    ax_tri_bot.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
-    ax_tri_bot.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    
+    # EFIT plot : betap, internal inductance, q95, plasma current
     # plasma current
-    ax_Ip = fig.add_subplot(gs[3,0])
-    ax_Ip.plot(t, ip, label = 'Ip')
-    ax_Ip.text(0.85, 0.8, "Ip", transform = ax_Ip.transAxes)
-    ax_Ip.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
-    ax_Ip.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    ax_Ip.set_xlabel("time(s)")
+    ax_ip = fig.add_subplot(gs[0,0])
+    ax_ip.plot(plot_efit['time'], plot_efit['\\ipmhd'], label = 'Ip')
+    ax_ip.text(0.85, 0.8, "Ip", transform = ax_ip.transAxes)
+    ax_ip.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_ip.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+
+    # betap
+    ax_betap = fig.add_subplot(gs[1,0])
+    ax_betap.plot(plot_efit['time'], plot_efit['\\betap'], label = 'betap')
+    ax_betap.text(0.85, 0.8, "betap", transform = ax_betap.transAxes)
+    ax_betap.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_betap.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
     
-    # line density
-    ax_li = fig.add_subplot(gs[0,1])
-    ax_li.plot(t, li, label = 'line density')
+    # li
+    ax_li = fig.add_subplot(gs[2,0])
+    ax_li.plot(plot_efit['time'], plot_efit['\\li'], label = 'li')
     ax_li.text(0.85, 0.8, "li", transform = ax_li.transAxes)
     ax_li.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_li.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
     
     # q95
-    ax_q95 = fig.add_subplot(gs[1,1])
-    ax_q95.plot(t, q95, label = 'q95')
+    ax_q95 = fig.add_subplot(gs[3,0])
+    ax_q95.plot(plot_efit['time'], plot_efit['\\q95'], label = 'q95')
     ax_q95.text(0.85, 0.8, "q95", transform = ax_q95.transAxes)
-    ax_q95.set_ylim([0,10])
     ax_q95.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_q95.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+    ax_q95.set_ylim([0, 10.0])
+    ax_q95.set_xlabel("time(unit:s)")
     
-    # betap
-    ax_bp = fig.add_subplot(gs[2,1])
-    ax_bp.plot(t, betap, label = 'beta p')
-    ax_bp.text(0.85, 0.8, "betap", transform = ax_bp.transAxes)
-    ax_bp.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
-    ax_bp.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+    # ECE part
+    ax_ece = fig.add_subplot(gs[:,1])
+    
+    for name in config.ECE:
+        ax_ece.plot(plot_ece['time'], plot_ece[name], label = name[1:])
 
-    # electron density
-    ax_ne = fig.add_subplot(gs[3,1])
-    ax_ne.plot(t, ne, label = 'ne')
-    ax_ne.text(0.85, 0.8, "ne", transform = ax_ne.transAxes)
-    ax_ne.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
-    ax_ne.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")    
-    ax_ne.set_xlabel("time(s)")
+    ax_ece.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed")
+    ax_ece.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_ece.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
     
+    ax_ece.set_ylabel("ECE(unit:KeV)")
+    ax_ece.set_xlabel("time(unit:s)")
+    ax_ece.legend(loc = 'upper right')
     
-    # W_tot
-    ax_w_tot = fig.add_subplot(gs[0,2])
-    ax_w_tot.plot(t, W_tot, label = 'W-tot')
-    ax_w_tot.text(0.85, 0.8, "W-tot", transform = ax_w_tot.transAxes)
-    ax_w_tot.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
-    ax_w_tot.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    
-    # Te-core
-    ax_te_core = fig.add_subplot(gs[1,2])
-    ax_te_core.plot(t, te_core, label = 'Te-core')
-    ax_te_core.text(0.85, 0.8, "Te-core", transform = ax_te_core.transAxes)
-    ax_te_core.set_ylim([0,10])
-    ax_te_core.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
-    ax_te_core.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    
-    # Te-edge
-    ax_te_edge = fig.add_subplot(gs[2,2])
-    ax_te_edge.plot(t, betap, label = 'Te-edge')
-    ax_te_edge.text(0.85, 0.8, "Te-edge", transform = ax_te_edge.transAxes)
-    ax_te_edge.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
-    ax_te_edge.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-
-    # ne_ng_ratio
-    ax_ne_ng = fig.add_subplot(gs[3,2])
-    ax_ne_ng.plot(t, ne, label = 'Greenwald ratio')
-    ax_ne_ng.text(0.85, 0.8, "Greenwald ratio", transform = ax_ne_ng.transAxes)
-    ax_ne_ng.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
-    ax_ne_ng.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")    
-    ax_ne_ng.set_xlabel("time(s)")
-
-    # probability
-    threshold_line = [0.5] * len(time_x)
-    ax2 = fig.add_subplot(gs[:,3])
-    ax2.plot(time_x, prob_list, 'b', label = 'disrupt prob')
-    ax2.plot(time_x, threshold_line, 'k', label = "threshold(p = 0.5)")
-    ax2.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed", label = "flattop (t={:.3f})".format(tftsrt))
-    ax2.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed", label = "TQ (t={:.3f})".format(t_disrupt))
-    ax2.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed", label = "CQ (t={:.3f})".format(t_current))
-    ax2.set_ylabel("probability")
-    ax2.set_xlabel("time(unit : s)")
-    ax2.set_ylim([0,1])
-    ax2.set_xlim([0, max(time_x) + dt * 8])
-    ax2.legend(loc = 'upper right')
+    # Disruption prediction
+    threshold_line = [0.5] * len(time_slice)
+    ax_prob = fig.add_subplot(gs[:,2])
+    ax_prob.plot(time_slice, prob_list, 'b', label = 'disrupt prob')
+    ax_prob.plot(time_slice, threshold_line, 'k', label = "threshold(p = 0.5)")
+    ax_prob.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed", label = "flattop (t={:.3f})".format(tftsrt))
+    ax_prob.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed", label = "TQ (t={:.3f})".format(t_disrupt))
+    ax_prob.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed", label = "CQ (t={:.3f})".format(t_current))
+    ax_prob.set_ylabel("probability")
+    ax_prob.set_xlabel("time(unit:s)")
+    ax_prob.set_ylim([0,1])
+    ax_prob.set_xlim([0, max(time_slice) + dt * 8])
+    ax_prob.legend(loc = 'upper right')
     
     fig.tight_layout()
 
     if save_dir:
         plt.savefig(save_dir, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
 
-    return fig, time_x, prob_list
+    return fig, time_slice, prob_list
 
 def plot_learning_curve(train_loss, valid_loss, train_f1, valid_f1, figsize : Tuple[int,int] = (12,6), save_dir : str = "./results/learning_curve.png"):
     x_epochs = range(1, len(train_loss) + 1)
@@ -469,15 +480,16 @@ def measure_computation_time(model : torch.nn.Module, input_shape : Tuple, n_sam
         torch.cuda.empty_cache()
         torch.cuda.init()
         
-        sample_data = torch.zeros(input_shape)
-        t_start = time.time()
-        sample_output = model(sample_data.to(device))
-        t_end = time.time()
-        dt = t_end - t_start
-        t_measures.append(dt)
-        
-        sample_output.cpu()
-        sample_data.cpu()
+        with torch.no_grad():
+            sample_data = torch.zeros(input_shape)
+            t_start = time.time()
+            sample_output = model(sample_data.to(device))
+            t_end = time.time()
+            dt = t_end - t_start
+            t_measures.append(dt)
+            
+            sample_output.cpu()
+            sample_data.cpu()
         
         del sample_data
         del sample_output

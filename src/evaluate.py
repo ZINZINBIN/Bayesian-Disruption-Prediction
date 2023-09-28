@@ -7,6 +7,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report, f1_score
 from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve
+from src.models.BNN import compute_uncertainty_per_data
 
 def evaluate(
     test_loader : DataLoader, 
@@ -17,7 +18,7 @@ def evaluate(
     save_conf : Optional[str] = "./results/confusion_matrix.png",
     save_txt : Optional[str] = None,
     threshold : float = 0.5,
-    use_profile : bool = False,
+    use_uncertainty : bool = False,
     ):
 
     test_loss = 0
@@ -25,6 +26,7 @@ def evaluate(
     test_f1 = 0
     total_pred = []
     total_label = []
+    total_uncertainty = []
 
     if device is None:
         device = torch.device("cuda:0")
@@ -34,27 +36,37 @@ def evaluate(
 
     total_size = 0
 
-    for idx, (data, target) in enumerate(test_loader):
+    for idx, data in enumerate(test_loader):
         with torch.no_grad():
             optimizer.zero_grad()
-            
-            if use_profile:
-                output = model(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
-            else:
-                output = model(data.to(device))
-                
-            loss = loss_fn(output, target.to(device))
+        
+            output = model(data)       
+            loss = loss_fn(output, data['label'].to(device))
             test_loss += loss.item()
             
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
             pred = torch.logical_not((pred > torch.FloatTensor([threshold]).to(device)))
-            test_acc += pred.eq(target.to(device).view_as(pred)).sum().item()
+            test_acc += pred.eq(data['label'].to(device).view_as(pred)).sum().item()
             total_size += pred.size(0)
             
             pred_normal = torch.nn.functional.softmax(output, dim = 1)[:,1].detach()
             
+            if use_uncertainty:
+                
+                batch_size = data['label'].size()[0]
+                uncertainty = []
+                
+                for idx in range(batch_size):
+                    input_data = {}
+                    for key in data.keys():
+                        input_data[key] = data[key][idx].squeeze(0)
+                    au, eu = compute_uncertainty_per_data(model, input_data, device, n_samples = 32)
+                    uncertainty.append(au)
+                        
+                total_uncertainty.extend(uncertainty)
+                
             total_pred.append(pred_normal.view(-1,1))
-            total_label.append(target.view(-1,1))
+            total_label.append(data['label'].view(-1,1))
             
     test_loss /= (idx + 1)
     test_acc /= total_size
@@ -62,11 +74,14 @@ def evaluate(
     total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
     total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
     
+    total_uncertainty = np.array(total_uncertainty).reshape(-1,2)
+    
     # method 2 : compute f1, auc, roc and classification report
     # data clipping / postprocessing for ignoring nan, inf, too large data
     total_pred = np.nan_to_num(total_pred, copy = True, nan = 0, posinf = 1.0, neginf = 0)
     lr_probs = total_pred
-    total_pred = np.where(total_pred > 1 - threshold, 1, 0)
+    # total_pred = np.where(total_pred > 1 - threshold, 1, 0)
+    total_pred = np.where((total_pred > 1 - threshold) and (total_uncertainty[:,0] < 0.2), 1, 0)
     
     # f1 score
     test_f1 = f1_score(total_label, total_pred, average = "macro")
@@ -152,23 +167,19 @@ def evaluate_tensorboard(
 
     total_size = 0
 
-    for idx, (data, target) in enumerate(test_loader):
+    for idx, data in enumerate(test_loader):
         with torch.no_grad():
             optimizer.zero_grad()
-            
-            if use_profile:
-                output = model(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
-            else:
-                output = model(data.to(device))
+            output = model(data)
                 
-            loss = loss_fn(output, target.to(device))
+            loss = loss_fn(output, data['label'].to(device))
             test_loss += loss.item()
             
             pred = torch.nn.functional.softmax(output, dim = 1)[:,1].detach()
             total_size += pred.size(0)
             
             total_pred.append(pred.view(-1,1))
-            total_label.append(target.view(-1,1))
+            total_label.append(data['label'].view(-1,1))
 
     total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
     total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
@@ -255,41 +266,41 @@ def evaluate_detail(
     model.eval()
     
     # evaluation for train dataset
-    for idx, (data, target, shot_num) in enumerate(train_loader):
+    for idx, data in enumerate(train_loader):
         with torch.no_grad():
-            output = model(data.to(device))
+            output = model(data)
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
             
-            total_shot = np.concatenate((total_shot, shot_num.cpu().numpy().reshape(-1,)))
+            total_shot = np.concatenate((total_shot, data['shot_num'].cpu().numpy().reshape(-1,)))
             total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
-            total_label = np.concatenate((total_label, target.cpu().numpy().reshape(-1,)))
+            total_label = np.concatenate((total_label, data['label'].cpu().numpy().reshape(-1,)))
             
     total_task.extend(["train" for _ in range(train_loader.dataset.__len__())])
             
     model.eval()
     
     # evaluation for valid dataset
-    for idx, (data, target, shot_num) in enumerate(valid_loader):
+    for idx, data in enumerate(valid_loader):
         with torch.no_grad():
-            output = model(data.to(device))
+            output = model(data)
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
             
-            total_shot = np.concatenate((total_shot, shot_num.cpu().numpy().reshape(-1,)))
+            total_shot = np.concatenate((total_shot, data['shot_num'].cpu().numpy().reshape(-1,)))
             total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
-            total_label = np.concatenate((total_label, target.cpu().numpy().reshape(-1,)))
+            total_label = np.concatenate((total_label, data['target'].cpu().numpy().reshape(-1,)))
             
     total_task.extend(["valid" for _ in range(valid_loader.dataset.__len__())])
             
     model.eval()
     # evaluation for test dataset
-    for idx, (data, target, shot_num) in enumerate(test_loader):
+    for idx, data in enumerate(test_loader):
         with torch.no_grad():
-            output = model(data.to(device))    
+            output = model(data)    
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
             
-            total_shot = np.concatenate((total_shot, shot_num.cpu().numpy().reshape(-1,)))
+            total_shot = np.concatenate((total_shot, data['shot_num'].cpu().numpy().reshape(-1,)))
             total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
-            total_label = np.concatenate((total_label, target.cpu().numpy().reshape(-1,)))
+            total_label = np.concatenate((total_label, data['label'].cpu().numpy().reshape(-1,)))
 
     total_task.extend(["test" for _ in range(test_loader.dataset.__len__())])
     df = pd.DataFrame({})

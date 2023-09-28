@@ -31,7 +31,6 @@ def compute_loss(
     model : nn.Module,
     loss_fn : nn.Module,
     device : str = "cpu",
-    use_profile : bool = False
     ):
 
     model.eval()
@@ -45,10 +44,12 @@ def compute_loss(
 
     for batch_idx, (data, target) in enumerate(dataloader):
         with torch.no_grad():
-            if use_profile:
-                output = model(data['0D'].to(device), data['ne'].to(device), data['te'].to(device))
+            
+            if isinstance(data, dict):
+                output = model(data)
             else:
-                output = model(data.to(device))
+                output = model(data.to(device)) 
+                
             loss = loss_fn(output, target.to(device))
     
             total_loss += loss.item()
@@ -72,7 +73,6 @@ def compute_permute_feature_importance(
     device : str,
     criteria : Literal['loss','score'],
     save_dir : str,
-    use_profile : bool = False
     ):
     
     # convert get_shot_num variable true
@@ -83,7 +83,7 @@ def compute_permute_feature_importance(
     
     results = []
     
-    loss_orig, score_orig = compute_loss(dataloader, model, loss_fn, device, use_profile)
+    loss_orig, score_orig = compute_loss(dataloader, model, loss_fn, device)
     
     for k in tqdm(range(n_features), desc = "processing for feature importance"):
         
@@ -91,7 +91,7 @@ def compute_permute_feature_importance(
         np.random.shuffle(dataloader.dataset.ts_data[features[k]].values)
         
         # compute the loss
-        loss, score = compute_loss(dataloader, model, loss_fn, device, use_profile)
+        loss, score = compute_loss(dataloader, model, loss_fn, device)
         
         # return the order of the features
         dataloader.dataset.ts_data = data_orig
@@ -120,6 +120,7 @@ def compute_permute_feature_importance(
     plt.yticks(np.arange(n_features), df.feature.values)
     plt.title('0D data - feature importance')
     plt.ylim((-1,n_features + 1))
+    
     # plt.xlim([0, 5.0])
     plt.xlabel('Permutation feature importance')
     plt.ylabel('Feature', size = 14)

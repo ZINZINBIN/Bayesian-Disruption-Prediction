@@ -61,7 +61,7 @@ class MultiHeadModel(nn.Module):
         
         self.classifier = nn.Sequential(
             nn.Linear(feature_dims, cls_dims),
-            nn.BatchNorm1d(cls_dims),
+            nn.LayerNorm(cls_dims),
             GELU(),
             nn.Linear(cls_dims, n_classes)
         )

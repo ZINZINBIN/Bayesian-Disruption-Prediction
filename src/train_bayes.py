@@ -11,6 +11,9 @@ from src.utils.EarlyStopping import EarlyStopping
 from torch.utils.tensorboard import SummaryWriter
 from src.models.BNN import BayesianModule, minibatch_weight
 from src.utils.utility import generate_prob_curve_from_0D
+from src.config import Config
+
+config = Config()
 
 # anomaly detection from training process : backward process
 torch.autograd.set_detect_anomaly(True)
@@ -35,19 +38,20 @@ def train_per_epoch(
     total_label = []
     total_size = 0
 
-    for batch_idx, (data, target) in enumerate(train_loader):
+    for batch_idx, data in enumerate(train_loader):
        
         optimizer.zero_grad()
         pi_weight = minibatch_weight(batch_idx, num_batches=len(train_loader))
-        output = model(data.to(device))
+
+        output = model(data)
         loss = model.elbo(
-            inputs = data.to(device),
-            targets = target.to(device),
+            inputs = data,
+            targets = data['label'].to(device),
             criterion = loss_fn,
             n_samples = 8,
             w_complexity = pi_weight
         )
-        
+            
         if not torch.isfinite(loss):
             print("train_per_epoch | warning : loss nan occurs at batch_idx : {}".format(batch_idx))
             continue
@@ -63,11 +67,11 @@ def train_per_epoch(
         train_loss += loss.item()
 
         pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
-        train_acc += pred.eq(target.to(device).view_as(pred)).sum().item()
+        train_acc += pred.eq(data['label'].to(device).view_as(pred)).sum().item()
         total_size += pred.size(0) 
         
         total_pred.append(pred.view(-1,1))
-        total_label.append(target.view(-1,1))
+        total_label.append(data['label'].view(-1,1))
         
     if scheduler:
         scheduler.step()
@@ -104,15 +108,16 @@ def valid_per_epoch(
     total_label = []
     total_size = 0
 
-    for batch_idx, (data, target) in enumerate(valid_loader):
+    for batch_idx, data in enumerate(valid_loader):
         with torch.no_grad():
             
             optimizer.zero_grad()
-            output = model(data.to(device))
             pi_weight = minibatch_weight(batch_idx, num_batches = len(valid_loader))
+    
+            output = model(data)
             loss = model.elbo(
-                inputs = data.to(device),
-                targets = target.to(device),
+                inputs = data,
+                targets = data['label'].to(device),
                 criterion = loss_fn,
                 n_samples = 8,
                 w_complexity = pi_weight
@@ -120,11 +125,11 @@ def valid_per_epoch(
     
             valid_loss += loss.item()
             pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
-            valid_acc += pred.eq(target.to(device).view_as(pred)).sum().item()
+            valid_acc += pred.eq(data['label'].to(device).view_as(pred)).sum().item()
             total_size += pred.size(0)
 
             total_pred.append(pred.view(-1,1))
-            total_label.append(target.view(-1,1))
+            total_label.append(data['label'].view(-1,1))
 
     valid_loss /= total_size
     valid_acc /= total_size
@@ -235,18 +240,19 @@ def train(
                     
                     # Checking the performance for continuous disruption prediciton 
                     fig, _, _ = generate_prob_curve_from_0D(
+                        filepath = config.filepath,
                         model = model, 
-                        device = device, 
+                        device = device,
                         save_dir = None,
-                        ts_data_dir = "./dataset/KSTAR_Disruption_ts_data_extend.csv",
-                        ts_cols = test_for_check_per_epoch.dataset.cols,
-                        shot_list_dir = './dataset/KSTAR_Disruption_Shot_List_2022.csv',
-                        shot_num = 21310,
-                        seq_len = test_for_check_per_epoch.dataset.seq_len,
+                        shot_num = 30312,
+                        seq_len_efit = test_for_check_per_epoch.dataset.seq_len_efit, 
+                        seq_len_ece = test_for_check_per_epoch.dataset.seq_len_ece,
+                        seq_len_diag = test_for_check_per_epoch.dataset.seq_len_diag, 
                         dist = test_for_check_per_epoch.dataset.dist,
-                        dt = test_for_check_per_epoch.dataset.dt,
-                        scaler = test_for_check_per_epoch.dataset.scaler
+                        dt = 0.01,
+                        mode = test_for_check_per_epoch.dataset.mode,
                     )
+                    
                     model.train()
                     writer.add_figure('Continuous disruption prediction', fig, epoch)
                     
