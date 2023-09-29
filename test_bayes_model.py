@@ -258,8 +258,8 @@ if __name__ == "__main__":
         optimizer,
         loss_fn,
         device,
-        save_conf = os.path.join(save_dir, "{}_valid_confusion.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_valid_eval.txt".format(tag)),
+        save_conf = os.path.join(save_dir, "{}_valid_confusion_use_uncertainty.png".format(tag)),
+        save_txt = os.path.join(save_dir, "{}_valid_eval_use_uncertainty.txt".format(tag)),
         use_uncertainty=True
     )
     
@@ -270,12 +270,12 @@ if __name__ == "__main__":
         optimizer,
         loss_fn,
         device,
-        save_conf = os.path.join(save_dir, "{}_test_confusion.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_test_eval.txt".format(tag)),
+        save_conf = os.path.join(save_dir, "{}_test_confusion_use_uncertainty.png".format(tag)),
+        save_txt = os.path.join(save_dir, "{}_test_eval_use_uncertainty.txt".format(tag)),
         use_uncertainty=True
     )
     
-    '''
+    
     # Additional analyzation
     print("\n====================== Visualization process ======================\n")
     if args['use_sampling']:
@@ -329,50 +329,4 @@ if __name__ == "__main__":
         dt = 0.01,
         mode = args['mode'], 
     )
-    '''
     
-    # experiment
-    test_loader = DataLoader(test_data, batch_size = 1, sampler=test_sampler, num_workers = 1, pin_memory=args["pin_memory"])
-
-    test_data = None
-    test_label = None
-    
-    for idx, data in enumerate(test_loader):
-        
-        if data['label'].numpy() == 0:
-            test_input = data
-            test_label = data['label']
-            pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
-            pred = np.where(pred > 0.5, 1, 0)
-            
-            if pred == 1:
-                break
-        
-    test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
-    au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128)
-    
-    print("test_pred : ", test_pred)
-    print("true label : ", test_label)
-    print("aleatoric uncertainty: ", au)
-    print("epistemic uncertainty: ", eu)
-    
-    preds_disrupt = test_pred[:,0]
-    preds_normal = test_pred[:,1]
-    
-    import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1,2)
-    axes[0].hist(preds_disrupt.reshape(-1,), bins = 32, color = 'lightgray')
-    axes[1].hist(preds_normal.reshape(-1,), bins = 32, color = 'lightgray')
-    
-    axes[0].set_xlabel("Output(probs)")
-    axes[0].set_xlim([0,1.0])
-    axes[0].set_ylabel('n-samples')
-    axes[0].set_title("Disruption")
-    
-    axes[1].set_xlabel("Output(probs)")
-    axes[1].set_xlim([0,1.0])
-    axes[1].set_ylabel('n-samples')
-    axes[1].set_title('Normal')
-    
-    fig.tight_layout()
-    plt.savefig("./test.png")

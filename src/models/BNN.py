@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from typing import Any, Optional, Dict
-from src.models.transformer import TransformerEncoder, GELU
 from pytorch_model_summary import summary
 
 # abstract for bayesian module
@@ -157,7 +156,6 @@ class BayesLinear(BayesianModule):
     def compute_kld(self, log_prior : torch.Tensor, log_posterior : torch.Tensor):
         return log_posterior - log_prior
         
-
 class BayesDropout(nn.Module):
     def __init__(self, p : float = 0.5):
         super().__init__()
@@ -172,56 +170,6 @@ class BayesDropout(nn.Module):
         selected_ = torch.autograd.Variable(selected_.type(torch.FloatTensor), requires_grad = False).to(x.device)
         res = torch.mul(selected_, x) * self._multiplier
         return res
-
-@variational_approximator
-class BayesianTransformer(nn.Module):
-    def __init__(
-        self, 
-        n_features : int = 11, 
-        kernel_size : int = 5,
-        feature_dims : int = 256, 
-        max_len : int = 128, 
-        n_layers : int = 1, 
-        n_heads : int = 8, 
-        dim_feedforward : int = 1024, 
-        dropout : float = 0.1, 
-        cls_dims : int = 128, 
-        n_classes : int = 2,
-        prior_pi : Optional[float] = 0.5, 
-        prior_sigma1 : Optional[float] = 1.0, 
-        prior_sigma2 : Optional[float] = 0.0025
-        ):
-        super().__init__()
-        self.n_classes = n_classes
-        self.encoder = TransformerEncoder(n_features, kernel_size, feature_dims, max_len, n_layers, n_heads, dim_feedforward, dropout)
-        self.classifier = nn.Sequential(
-            BayesLinear(feature_dims, cls_dims, prior_pi, prior_sigma1, prior_sigma2),
-            nn.LayerNorm(cls_dims),
-            GELU(),
-            BayesLinear(cls_dims, n_classes, prior_pi, prior_sigma1, prior_sigma2),
-        )
-    
-    def forward(self, x : torch.Tensor):
-        x = self.encoder(x)
-        x = self.classifier(x)
-        return x
-    
-    def encode(self, x: torch.Tensor):
-        with torch.no_grad():
-            x = self.encoder(x)
-        return x
-
-    def summary(self):
-        sample_x = torch.zeros((1, self.encoder.max_len, self.encoder.n_features))
-        summary(self, sample_x, batch_size = 1, show_input = True, print_summary=True)
-        
-    def predict_per_sample(self, x : torch.Tensor):
-        with torch.no_grad():
-            x = self.encoder(x)
-            outputs = torch.zeros((x.size()[0], self.n_classes), device = x.device)
-            for idx in range(x.size()[0]):
-                outputs[idx, :] = self.classifier(x[idx, :].unsqueeze(0))
-            return outputs
     
 # Uncertaintiy computation
 def compute_ensemble_probability(model : nn.Module, input : Dict[str, torch.Tensor], device : str = 'cpu', n_samples : int = 8):
@@ -234,17 +182,18 @@ def compute_ensemble_probability(model : nn.Module, input : Dict[str, torch.Tens
     model.eval()
     model.to(device)
     
-    '''
+    
     # 배치 단위로 불확실성 계산하는 코드 : 추후 추가 예정
+    input_n_repeat = {}
     for key in input.keys():
         if input[key].ndim == 2:
-            input[key] = input[key].unsqueeze(0)
-            input[key] = input[key].repeat(n_samples, 1, 1)
-    
-    outputs = model.predict_per_sample(input)
+            input_n_repeat[key] = input[key].unsqueeze(0)
+        input_n_repeat[key] = input[key].repeat(n_samples, 1, 1)
+        
+    outputs = model.predict_per_sample(input_n_repeat)
     probs = torch.nn.functional.softmax(outputs, dim = 1)
-    '''
     
+    '''
     # 일단 여러번 연산해서 얻는 구조로 진행
     for key in input.keys():
         if input[key].ndim == 2:
@@ -257,6 +206,7 @@ def compute_ensemble_probability(model : nn.Module, input : Dict[str, torch.Tens
         prob = torch.nn.functional.softmax(output, dim = 1)
         probs[idx,:] = prob
         
+    '''
     probs = probs.detach().cpu().numpy() 
     
     return probs
@@ -265,38 +215,29 @@ def compute_uncertainty_per_data(model : nn.Module, input : Dict[str, torch.Tens
     
     model.eval()
     model.to(device)
-    '''
+    
+    input_n_repeat = {}
     for key in input.keys():
         if input[key].ndim == 2:
-            input[key] = input[key].unsqueeze(0)
-            input[key] = input[key].repeat(n_samples, 1, 1)
-    
-    outputs = model(input)
+            input_n_repeat[key] = input[key].unsqueeze(0)
+        input_n_repeat[key] = input[key].repeat(n_samples, 1, 1)
+        
+    outputs = model.predict_per_sample(input_n_repeat)
     probs = torch.nn.functional.softmax(outputs, dim = 1)
-    '''
-    
-    for key in input.keys():
-        if input[key].ndim == 2:
-            input[key] = input[key].unsqueeze(0)
-    
-    probs = torch.zeros((n_samples, 2), device = device)
-    outputs = torch.zeros((n_samples, 2), device = device)
-    
-    for idx in range(n_samples):
-        output = model(input)
-        outputs[idx,:] = output
     
     if normalized:
-        probs = torch.nn.functional.softplus(outputs, dim = 1)
+        probs = torch.nn.functional.softmax(outputs, dim = 1)
         probs = probs / torch.sum(probs, dim = 1).unsqueeze(1)
     else:
         probs = torch.nn.functional.softmax(outputs, dim = 1)
         
     probs = probs.detach().cpu().numpy()   
     probs_mean = np.mean(probs, axis = 0)
-    probs_diff = probs = np.expand_dims(probs_mean, 0)
+    probs_diff = probs - np.expand_dims(probs_mean, 0)
     epistemic_uncertainty = np.dot(probs_diff.T, probs_diff) / n_samples
-    aleatoric_uncertainty = np.diag(probs_mean) - (np.dot(probs_diff.T, probs_diff) / n_samples)
+    epistemic_uncertainty = np.diag(epistemic_uncertainty)
+    
+    aleatoric_uncertainty = np.diag(probs) - np.dot(probs.T, probs) / n_samples
     aleatoric_uncertainty = np.diag(aleatoric_uncertainty)
     
     return aleatoric_uncertainty, epistemic_uncertainty

@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report, f1_score
 from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve
 from src.models.BNN import compute_uncertainty_per_data
+from tqdm.auto import tqdm
 
 def evaluate(
     test_loader : DataLoader, 
@@ -26,7 +27,8 @@ def evaluate(
     test_f1 = 0
     total_pred = []
     total_label = []
-    total_uncertainty = []
+    total_au = []
+    total_eu = []
 
     if device is None:
         device = torch.device("cuda:0")
@@ -36,7 +38,7 @@ def evaluate(
 
     total_size = 0
 
-    for idx, data in enumerate(test_loader):
+    for idx, data in enumerate(tqdm(test_loader, 'evaluation process')):
         with torch.no_grad():
             optimizer.zero_grad()
         
@@ -54,16 +56,19 @@ def evaluate(
             if use_uncertainty:
                 
                 batch_size = data['label'].size()[0]
-                uncertainty = []
+                aus = []
+                eus = []
                 
                 for idx in range(batch_size):
                     input_data = {}
                     for key in data.keys():
-                        input_data[key] = data[key][idx].squeeze(0)
-                    au, eu = compute_uncertainty_per_data(model, input_data, device, n_samples = 32)
-                    uncertainty.append(au)
+                        input_data[key] = data[key][idx]
+                    au, eu = compute_uncertainty_per_data(model, input_data, device, n_samples = 16)
+                    aus.append(au)
+                    eus.append(eu)
                         
-                total_uncertainty.extend(uncertainty)
+                total_au.extend(aus)
+                total_eu.extend(eus)
                 
             total_pred.append(pred_normal.view(-1,1))
             total_label.append(data['label'].view(-1,1))
@@ -74,14 +79,18 @@ def evaluate(
     total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
     total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
     
-    total_uncertainty = np.array(total_uncertainty).reshape(-1,2)
+    total_au = np.array(total_au).reshape(-1,2)
+    total_eu = np.array(total_eu).reshape(-1,2)
     
     # method 2 : compute f1, auc, roc and classification report
     # data clipping / postprocessing for ignoring nan, inf, too large data
     total_pred = np.nan_to_num(total_pred, copy = True, nan = 0, posinf = 1.0, neginf = 0)
     lr_probs = total_pred
-    # total_pred = np.where(total_pred > 1 - threshold, 1, 0)
-    total_pred = np.where((total_pred > 1 - threshold) and (total_uncertainty[:,0] < 0.2), 1, 0)
+    
+    if not use_uncertainty:
+        total_pred = np.where(total_pred > 1 - threshold, 1, 0)
+    else:
+        total_pred = np.where((total_pred > 1 - threshold) | ((total_pred < 1 - threshold) & (abs(2 * total_pred - 1) < 0.6) & (total_au[:,0] > 0.1)), 1, 0)
     
     # f1 score
     test_f1 = f1_score(total_label, total_pred, average = "macro")
@@ -266,7 +275,7 @@ def evaluate_detail(
     model.eval()
     
     # evaluation for train dataset
-    for idx, data in enumerate(train_loader):
+    for idx, data in enumerate(tqdm(train_loader, 'evaluation process for train data')):
         with torch.no_grad():
             output = model(data)
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
@@ -280,7 +289,7 @@ def evaluate_detail(
     model.eval()
     
     # evaluation for valid dataset
-    for idx, data in enumerate(valid_loader):
+    for idx, data in enumerate(tqdm(valid_loader, 'evaluation process for valid data')):
         with torch.no_grad():
             output = model(data)
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
@@ -293,7 +302,7 @@ def evaluate_detail(
             
     model.eval()
     # evaluation for test dataset
-    for idx, data in enumerate(test_loader):
+    for idx, data in enumerate(tqdm(test_loader, 'evaluation process for test data')):
         with torch.no_grad():
             output = model(data)    
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]

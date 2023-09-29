@@ -127,7 +127,7 @@ def preparing_0D_dataset(
     
     if scaler is not None:
         for key in scaler.keys():
-            scaler[key].fit(train[key][config.COLUMN_NAME_SCALER[key]].values)
+            scaler[key].fit(train[key][config.COLUMN_NAME_SCALER[key]])
 
     return train, valid, test, scaler
     
