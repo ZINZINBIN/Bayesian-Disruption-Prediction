@@ -282,6 +282,134 @@ class MultiSignalDataset(Dataset):
     
         return data
 
+def plot_shot_info(
+        filepath : Dict[str, str],
+        shot_num : Optional[int] = None,
+    ):
+    
+    save_dir = "./results/shot_{}_info.png".format(shot_num)
+    
+    data_disrupt = pd.read_csv(filepath['disrupt'], encoding = "euc-kr")
+    data_efit = pd.read_csv(filepath['efit'])
+    data_ece = pd.read_csv(filepath['ece'])
+    data_diag = pd.read_csv(filepath['diag'])
+    
+    tTQend = data_disrupt[data_disrupt.shot == shot_num].t_tmq.values[0]
+    tftsrt = data_disrupt[data_disrupt.shot == shot_num].t_flattop_start.values[0]
+    tipminf = data_disrupt[data_disrupt.shot == shot_num].t_ip_min_fault.values[0]
+    
+    t_disrupt = tTQend
+    t_current = tipminf
+    
+    plot_efit = data_efit[data_efit.shot == shot_num]
+    plot_ece = data_ece[data_ece.shot == shot_num]
+    plot_diag = data_diag[data_diag.shot == shot_num]
+    
+    # plot the disruption probability with plasma status
+    fig = plt.figure(figsize = (21, 8))
+    fig.suptitle("Disruption prediction with shot : {}".format(shot_num))
+    gs = GridSpec(nrows = 4, ncols = 3)
+    
+    # EFIT plot : betap, internal inductance, q95, plasma current
+    # plasma current
+    ax_ip = fig.add_subplot(gs[0,0])
+    ax_ip.plot(plot_efit['time'], plot_efit['\\ipmhd'], label = 'Ip')
+    ax_ip.text(0.85, 0.8, "Ip", transform = ax_ip.transAxes)
+    ax_ip.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_ip.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+
+    # betap
+    ax_betap = fig.add_subplot(gs[1,0])
+    ax_betap.plot(plot_efit['time'], plot_efit['\\betap'], label = 'betap')
+    ax_betap.text(0.85, 0.8, "betap", transform = ax_betap.transAxes)
+    ax_betap.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_betap.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+    
+    # li
+    ax_li = fig.add_subplot(gs[2,0])
+    ax_li.plot(plot_efit['time'], plot_efit['\\li'], label = 'li')
+    ax_li.text(0.85, 0.8, "li", transform = ax_li.transAxes)
+    ax_li.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_li.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+    
+    # q95
+    ax_q95 = fig.add_subplot(gs[3,0])
+    ax_q95.plot(plot_efit['time'], plot_efit['\\q95'], label = 'q95')
+    ax_q95.text(0.85, 0.8, "q95", transform = ax_q95.transAxes)
+    ax_q95.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_q95.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+    ax_q95.set_ylim([0, 10.0])
+    ax_q95.set_xlabel("time(unit:s)")
+    
+    # ECE part
+    ax_ece = fig.add_subplot(gs[:,1])
+    
+    for name in config.ECE:
+        ax_ece.plot(plot_ece['time'], plot_ece[name], label = name[1:])
+
+    ax_ece.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed")
+    ax_ece.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_ece.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+    ax_ece.set_ylabel("ECE(unit:KeV)")
+    ax_ece.set_xlabel("time(unit:s)")
+    ax_ece.legend(loc = 'upper right')
+    
+    # Diagnostic part
+    # LM
+    ax_lm = fig.add_subplot(gs[0,2])
+    
+    for col in config.LM:
+        ax_lm.plot(plot_diag['time'], plot_diag[col] / plot_diag[col].abs().max(), label = col[1:])
+        
+    ax_lm.text(0.85, 0.8, "LM signals", transform = ax_lm.transAxes)
+    ax_lm.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_lm.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+    ax_lm.set_xlabel("time(unit:s)")
+    ax_lm.legend(loc = 'upper right')
+    
+    # EC heating
+    ax_ech = fig.add_subplot(gs[1,2])
+
+    for col in config.ECH:
+        ax_ech.plot(plot_diag['time'], plot_diag[col] / plot_diag[col].abs().max(), label = col[1:])
+    
+    ax_ech.text(0.85, 0.8, "EC heating", transform = ax_ech.transAxes)
+    ax_ech.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_ech.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+    # ax_ech.set_ylim([0, 10.0])
+    ax_ech.set_xlabel("time(unit:s)")
+    ax_ech.legend(loc = 'upper right')
+    
+    # NB heating
+    ax_nbh = fig.add_subplot(gs[2,2])
+
+    for col in config.NBH:
+        ax_nbh.plot(plot_diag['time'], plot_diag[col] / plot_diag[col].abs().max(), label = col[1:])
+    
+    ax_nbh.text(0.85, 0.8, "NB heating", transform = ax_nbh.transAxes)
+    ax_nbh.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_nbh.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+    # ax_nbh.set_ylim([0, 10.0])
+    ax_nbh.set_xlabel("time(unit:s)")
+    ax_nbh.legend(loc = 'upper right')
+    
+    # DL
+    ax_dl = fig.add_subplot(gs[3,2])
+
+    for col in config.DL:
+        ax_dl.plot(plot_diag['time'], plot_diag[col] / plot_diag[col].abs().max(), label = col[1:])
+    
+    ax_dl.text(0.85, 0.8, "Diamagnetic Loop", transform = ax_dl.transAxes)
+    ax_dl.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
+    ax_dl.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
+    # ax_dl.set_ylim([0, 10.0])
+    ax_dl.set_xlabel("time(unit:s)")
+    ax_dl.legend(loc = 'upper right')
+    
+    fig.tight_layout()
+    plt.savefig(save_dir, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
+    return 
+
 def generate_prob_curve_from_0D(
         filepath : Dict[str, str],
         model : torch.nn.Module, 
@@ -365,7 +493,7 @@ def generate_prob_curve_from_0D(
   
     n_ftsrt = int(dataset.time_slice[0] // dt)
     time_slice = [v for v in dataset.time_slice]
-    time_slice = [dt * i + dt * dataset.seq_len_ece + dist * dt for i in range(0, n_ftsrt)] + time_slice 
+    time_slice = np.linspace(0, dataset.time_slice[0] - dt, n_ftsrt).tolist() + time_slice 
     prob_list = [0] * n_ftsrt + prob_list 
     
     print("time_slice : ", len(time_slice))
@@ -448,7 +576,12 @@ def generate_prob_curve_from_0D(
     return fig, time_slice, prob_list
 
 def plot_learning_curve(train_loss, valid_loss, train_f1, valid_f1, figsize : Tuple[int,int] = (12,6), save_dir : str = "./results/learning_curve.png"):
+    
     x_epochs = range(1, len(train_loss) + 1)
+    
+    if len(train_loss) == 0:
+        print("The length of training loss is 0, skip plotting learning curves")
+        return
 
     plt.figure(1, figsize=figsize, facecolor = 'white')
     plt.subplot(1,2,1)

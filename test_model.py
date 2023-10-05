@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
 from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
 from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_2D_decision_boundary
-from src.evaluate import evaluate
+from src.evaluate import evaluate, evaluate_detail
 from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
 from src.models.predictor import Predictor
 from src.feature_importance import compute_permute_feature_importance
@@ -205,9 +205,9 @@ if __name__ == "__main__":
         valid_sampler = RandomSampler(valid_data)
         test_sampler = RandomSampler(test_data)
     
-    train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=train_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=True)
-    valid_loader = DataLoader(valid_data, batch_size = args['batch_size'], sampler=valid_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=True)
-    test_loader = DataLoader(test_data, batch_size = args['batch_size'], sampler=test_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=True)
+    train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=train_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=False)
+    valid_loader = DataLoader(valid_data, batch_size = args['batch_size'], sampler=valid_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=False)
+    test_loader = DataLoader(test_data, batch_size = args['batch_size'], sampler=test_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=False)
     
     # Re-weighting
     if args['use_weighting']:
@@ -269,6 +269,17 @@ if __name__ == "__main__":
         device,
         save_conf = os.path.join(save_dir, "{}_test_confusion.png".format(tag)),
         save_txt = os.path.join(save_dir, "{}_test_eval.txt".format(tag))
+    )
+    
+    print("\nEvaluation per shot\n")
+    evaluate_detail(
+        train_loader,
+        valid_loader,
+        test_loader,
+        model,
+        device,
+        save_csv = os.path.join(save_dir, "{}_eval_detail.csv".format(tag)),
+        tag = tag
     )
     
     # Additional analyzation

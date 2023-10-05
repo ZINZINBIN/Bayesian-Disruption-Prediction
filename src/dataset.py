@@ -24,7 +24,7 @@ class MultiSignalDataset(Dataset):
         scaler_ece=None,
         scaler_diag=None, 
         mode : Literal['TQ', 'CQ'] = 'CQ', 
-        task : Literal['train', 'valid','test'] = 'train'
+        task : Literal['train', 'valid','test','eval'] = 'train'
         ):
         
         # KSTAR dataset
@@ -54,6 +54,7 @@ class MultiSignalDataset(Dataset):
         self.labels = []
         self.shot_num = []
         self.shot_list = []
+        self.dist_list = []
         self.get_shot_num = False
         self.n_classes = 2
         
@@ -63,8 +64,17 @@ class MultiSignalDataset(Dataset):
         # preprocessing: scaler application
         self.preprocessing()
         
-        # generate indice for matching labels
-        self.generate_indices()
+        if self.task != 'eval':
+            # generate indice for matching labels
+            self.generate_indices()
+        else:
+            self.generate_indices_eval()
+            self.get_shot_num = True
+        
+    def eval(self):
+        self.task = 'eval'
+        self.generate_indices_eval()
+        self.get_shot_num = True
         
     def init_shot_list(self):
         shot_list = self.data_ece.shot.unique()
@@ -178,7 +188,108 @@ class MultiSignalDataset(Dataset):
         self.n_disrupt = np.sum(np.array(self.labels) == 0)
         self.n_normal = np.sum(np.array(self.labels) == 1)
         
-        print("# {} | disruptive : {} | normal : {}".format(self.task, self.n_disrupt, self.n_normal))         
+        print("# {} | disruptive : {} | normal : {}".format(self.task, self.n_disrupt, self.n_normal))     
+    
+    def generate_indices_eval(self):
+        
+        # initialize 
+        self.shot_num.clear()
+        self.indices.clear()
+        self.labels.clear()
+        
+        self.n_disrupt = None
+        self.n_normal = None
+        
+        for shot in tqdm(self.shot_list, desc = "# {} | generate indice".format(self.task)):
+            
+            tTQend = self.data_disrupt[self.data_disrupt.shot == shot].t_tmq.values[0]
+            tftsrt = self.data_disrupt[self.data_disrupt.shot == shot].t_flattop_start.values[0]
+            tipminf = self.data_disrupt[self.data_disrupt.shot == shot].t_ip_min_fault.values[0]
+            
+            if self.mode == 'TQ':
+                t_disrupt = tTQend
+                
+            elif self.mode =='CQ':
+                t_disrupt = tipminf
+            
+            df_efit_shot = self.data_efit[self.data_efit.shot == shot]
+            df_ece_shot = self.data_ece[self.data_ece.shot == shot]
+            df_diag_shot = self.data_diag[self.data_diag.shot == shot]
+            
+            indices = []
+            labels = []
+            dists = []
+            
+            idx_efit = int(tftsrt / self.dt) // 5
+            idx_ece = int(tftsrt / self.dt)
+            idx_diag = int(tftsrt / self.dt)
+            
+            idx_efit_last = len(df_efit_shot.index)
+            idx_ece_last = len(df_ece_shot.index)
+            idx_diag_last = len(df_diag_shot.index)
+            
+            while(idx_ece < idx_ece_last or idx_diag < idx_diag_last):
+                
+                t_efit = df_efit_shot.iloc[idx_efit]['time']
+                t_ece = df_ece_shot.iloc[idx_ece]['time']
+                t_diag = df_diag_shot.iloc[idx_diag]['time']
+                
+                assert abs(t_diag - t_ece) <= 0.02, "Dignostic data and ECE data are not consistent"
+                
+                # end condition
+                if idx_ece_last - idx_ece - self.seq_len_ece - self.dist < 0 or idx_efit_last - idx_efit - self.seq_len_efit - self.dist // 5 < 0:
+                    break
+                
+                # synchronize t_efit and t_ece
+                if t_efit <= t_ece - 0.05:
+                    t_diff = t_ece - t_efit
+                    idx_efit += int(round(t_diff / self.dt / 5, 1))
+                
+                if t_ece >= tftsrt and t_ece < t_disrupt - self.dt * (1.5 * self.seq_len_ece + self.dist):
+                    indx_ece = df_ece_shot.index.values[idx_ece]
+                    indx_efit = df_efit_shot.index.values[idx_efit]
+                    indx_diag = df_diag_shot.index.values[idx_diag]
+        
+                    idx_ece += self.seq_len_ece // 5
+                    idx_diag += self.seq_len_diag // 5
+                
+                elif t_ece >=  t_disrupt - self.dt * (1.5 * self.seq_len_ece + self.dist) and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist):
+                    indx_ece = df_ece_shot.index.values[idx_ece]
+                    indx_efit = df_efit_shot.index.values[idx_efit]
+                    indx_diag = df_diag_shot.index.values[idx_diag]
+                    
+                    idx_ece += self.seq_len_ece // 10
+                    idx_diag += self.seq_len_diag // 10
+                
+                elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= t_disrupt - self.dt * self.seq_len_ece + 2 * self.dt:
+                    indx_ece = df_ece_shot.index.values[idx_ece]
+                    indx_efit = df_efit_shot.index.values[idx_efit]
+                    indx_diag = df_diag_shot.index.values[idx_diag]
+                    
+                    indices.append((indx_efit, indx_ece, indx_diag))
+                    labels.append(0)
+                    
+                    pred_time = t_disrupt - t_ece - self.dt * self.seq_len_ece
+                    dists.append(pred_time)
+
+                    idx_ece += 1
+                    idx_diag += 1
+                
+                elif t_ece < tftsrt:
+                    idx_ece += self.seq_len_ece // 5
+                    idx_diag += self.seq_len_diag // 5
+                    
+                elif t_ece > t_disrupt:
+                    break
+                
+                else:
+                    idx_ece += self.seq_len_ece // 5
+                    idx_diag += self.seq_len_diag // 5
+            
+            self.shot_num.extend([shot for _ in range(len(indices))])
+            self.indices.extend(indices)
+            self.labels.extend(labels)
+            self.dist_list.extend(dists)
             
     def __getitem__(self, idx : int):
         
@@ -195,7 +306,7 @@ class MultiSignalDataset(Dataset):
         data_diag = torch.from_numpy(data_diag).float()
         label = torch.from_numpy(label)
         
-        if self.get_shot_num:
+        if self.get_shot_num and self.task != 'eval':
             shot_num = self.shot_num[idx]
             data = {
                 "efit":data_efit,
@@ -203,6 +314,18 @@ class MultiSignalDataset(Dataset):
                 "diag":data_diag,
                 "label":label,
                 "shot_num":shot_num
+            }
+            
+        elif self.task == 'eval':
+            shot_num = self.shot_num[idx]
+            dist = self.dist_list[idx]
+            data = {
+                "efit":data_efit,
+                "ece":data_ece,
+                "diag":data_diag,
+                "label":label,
+                "shot_num":shot_num,
+                'dist':dist
             }
             
         else:

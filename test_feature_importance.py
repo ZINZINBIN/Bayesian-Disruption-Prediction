@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader, RandomSampler
 from src.utils.utility import preparing_0D_dataset, seed_everything
 from src.models.predictor import BayesianPredictor
 from src.models.BNN import compute_ensemble_probability, compute_uncertainty_per_data
+from src.feature_importance import integrated_gradients, calculate_outputs_and_gradients, compute_relative_importance
 from src.config import Config
 
 config = Config()
@@ -167,7 +168,7 @@ if __name__ == "__main__":
     test_sampler = RandomSampler(test_data)
 
     # evaluation process
-    print("\n====================== Uncertainty computation ======================\n")
+    print("\n====================== Integrated gradient for feature importance ======================\n")
     model.load_state_dict(torch.load(save_best_dir))
    
     # experiment
@@ -187,38 +188,19 @@ if __name__ == "__main__":
             
             if pred == 1:
                 break
-        
-    test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
-    au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
-    
-    # print("test_pred : ", test_pred)
-    print("\n====================== True Negative case ======================\n")
-    print("true label : ", test_label)
-    print("test shot : ", test_shot)
-    print("aleatoric uncertainty: ", au)
-    print("epistemic uncertainty: ", eu)
-    
-    preds_disrupt = test_pred[:,0]
-    preds_normal = test_pred[:,1]
     
     import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1,2)
-    axes[0].hist(preds_disrupt.reshape(-1,), bins = 32, color = 'gray')
-    axes[1].hist(preds_normal.reshape(-1,), bins = 32, color = 'gray')
+    fig, ax = plt.subplots(1,1)
+    feat_imp = compute_relative_importance(test_input, model, 0, None, 8, device)
+    ax.barh(list(feat_imp.keys()), list(feat_imp.values()))
+    ax.set_yticks([i for i in range(len(list(feat_imp.keys())))], labels = list(feat_imp.keys()))
+    ax.invert_yaxis()
+    ax.set_ylabel('Input features')
+    ax.set_xlabel('Relative feature importance')
     
-    axes[0].set_xlabel("Output(probs)")
-    axes[0].set_xlim([0,1.0])
-    axes[0].set_ylabel('n-samples')
-    axes[0].set_title("Disruption")
-    
-    axes[1].set_xlabel("Output(probs)")
-    axes[1].set_xlim([0,1.0])
-    axes[1].set_ylabel('n-samples')
-    axes[1].set_title('Normal')
-    
-    plt.suptitle("Disruptive phase - Missing alarm case, shot : {}".format(test_shot))
+    plt.suptitle("Relative importance - Missing alarm case, shot : {}".format(test_shot))
     fig.tight_layout()
-    plt.savefig("./results/test-TN.png")
+    plt.savefig("./results/feature_importance-TN.png")
     
     for idx, data in enumerate(test_loader):
         
@@ -231,42 +213,22 @@ if __name__ == "__main__":
             
             if pred == 0:
                 break
-        
-    test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
-    au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
+
+    fig, ax = plt.subplots(1,1)
+    feat_imp = compute_relative_importance(test_input, model, 0, None, 8, device)
+    ax.barh(list(feat_imp.keys()), list(feat_imp.values()))
+    ax.set_yticks([i for i in range(len(list(feat_imp.keys())))], labels = list(feat_imp.keys()))
+    ax.invert_yaxis()
+    ax.set_ylabel('Input features')
+    ax.set_xlabel('Relative feature importance')
     
-    # print("test_pred : ", test_pred)
-    print("\n====================== False Positive case ======================\n")
-    print("true label : ", test_label)
-    print("test shot : ", test_shot)
-    print("aleatoric uncertainty: ", au)
-    print("epistemic uncertainty: ", eu)
-    
-    preds_disrupt = test_pred[:,0]
-    preds_normal = test_pred[:,1]
-    
-    import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1,2)
-    axes[0].hist(preds_disrupt.reshape(-1,), bins = 32, color = 'gray')
-    axes[1].hist(preds_normal.reshape(-1,), bins = 32, color = 'gray')
-    
-    axes[0].set_xlabel("Output(probs)")
-    axes[0].set_xlim([0,1.0])
-    axes[0].set_ylabel('n-samples')
-    axes[0].set_title("Disruption")
-    
-    axes[1].set_xlabel("Output(probs)")
-    axes[1].set_xlim([0,1.0])
-    axes[1].set_ylabel('n-samples')
-    axes[1].set_title('Normal')
-    
-    plt.suptitle("Normal phase - False alarm case, shot : {}".format(test_shot))
+    plt.suptitle("Relative importance - False alarm case, shot : {}".format(test_shot))
     fig.tight_layout()
-    plt.savefig("./results/test-FP.png")
+    plt.savefig("./results/feature_importance-FP.png")
     
     for idx, data in enumerate(test_loader):
         
-        if data['label'].numpy() == 0:
+        if data['label'].numpy() == 0 and data['shot_num'].item() in [20941, 20945, 20947, 20948, 20949, 20951]:
             test_input = data
             test_shot = int(data['shot_num'].item())
             test_label = data['label']
@@ -275,35 +237,15 @@ if __name__ == "__main__":
             
             if pred == 0:
                 break
-        
-    test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
-    au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
+
+    fig, ax = plt.subplots(1,1)
+    feat_imp = compute_relative_importance(test_input, model, 0, None, 8, device)
+    ax.barh(list(feat_imp.keys()), list(feat_imp.values()))
+    ax.set_yticks([i for i in range(len(list(feat_imp.keys())))], labels = list(feat_imp.keys()))
+    ax.invert_yaxis()
+    ax.set_ylabel('Input features')
+    ax.set_xlabel('Relative feature importance')
     
-    # print("test_pred : ", test_pred)
-    print("\n====================== True Positive case ======================\n")
-    print("true label : ", test_label)
-    print("test shot : ", test_shot)
-    print("aleatoric uncertainty: ", au)
-    print("epistemic uncertainty: ", eu)
-    
-    preds_disrupt = test_pred[:,0]
-    preds_normal = test_pred[:,1]
-    
-    import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1,2)
-    axes[0].hist(preds_disrupt.reshape(-1,), bins = 32, color = 'gray')
-    axes[1].hist(preds_normal.reshape(-1,), bins = 32, color = 'gray')
-    
-    axes[0].set_xlabel("Output(probs)")
-    axes[0].set_xlim([0,1.0])
-    axes[0].set_ylabel('n-samples')
-    axes[0].set_title("Disruption")
-    
-    axes[1].set_xlabel("Output(probs)")
-    axes[1].set_xlim([0,1.0])
-    axes[1].set_ylabel('n-samples')
-    axes[1].set_title('Normal')
-    
-    plt.suptitle("Disruptive phase - True Positive case, shot : {}".format(test_shot))
+    plt.suptitle("Relative importance - True positive case, shot : {}".format(test_shot))
     fig.tight_layout()
-    plt.savefig("./results/test-TP.png")
+    plt.savefig("./results/feature_importance-TP.png")

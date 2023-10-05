@@ -161,7 +161,6 @@ def evaluate_tensorboard(
     loss_fn : Optional[torch.nn.Module]= None,
     device : Optional[str] = "cpu",
     threshold : float = 0.5,
-    use_profile : bool = False,
     ):
 
     test_loss = 0
@@ -256,14 +255,14 @@ def evaluate_detail(
     tag : Optional[str] = None
     ):
     
-    # convert get_shot_num variable true
-    train_loader.dataset.get_shot_num = True
-    valid_loader.dataset.get_shot_num = True
-    test_loader.dataset.get_shot_num = True
+    train_loader.dataset.eval()
+    valid_loader.dataset.eval()
+    test_loader.dataset.eval()
 
     total_shot = np.array([])
     total_pred = np.array([])
     total_label = np.array([])
+    total_dist = np.array([])
     total_task = []
 
     if device is None and torch.cuda.is_available():
@@ -280,6 +279,7 @@ def evaluate_detail(
             output = model(data)
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
             
+            total_dist = np.concatenate((total_dist, data['dist'].cpu().numpy().reshape(-1,)))
             total_shot = np.concatenate((total_shot, data['shot_num'].cpu().numpy().reshape(-1,)))
             total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
             total_label = np.concatenate((total_label, data['label'].cpu().numpy().reshape(-1,)))
@@ -294,9 +294,10 @@ def evaluate_detail(
             output = model(data)
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
             
+            total_dist = np.concatenate((total_dist, data['dist'].cpu().numpy().reshape(-1,)))
             total_shot = np.concatenate((total_shot, data['shot_num'].cpu().numpy().reshape(-1,)))
             total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
-            total_label = np.concatenate((total_label, data['target'].cpu().numpy().reshape(-1,)))
+            total_label = np.concatenate((total_label, data['label'].cpu().numpy().reshape(-1,)))
             
     total_task.extend(["valid" for _ in range(valid_loader.dataset.__len__())])
             
@@ -307,6 +308,7 @@ def evaluate_detail(
             output = model(data)    
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
             
+            total_dist = np.concatenate((total_dist, data['dist'].cpu().numpy().reshape(-1,)))
             total_shot = np.concatenate((total_shot, data['shot_num'].cpu().numpy().reshape(-1,)))
             total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
             total_label = np.concatenate((total_label, data['label'].cpu().numpy().reshape(-1,)))
@@ -315,10 +317,16 @@ def evaluate_detail(
     df = pd.DataFrame({})
     
     df['task'] = total_task
-    df['label'] = total_label
+    df['label'] = total_label.astype(int)
     df['shot'] = total_shot.astype(int)
-    df['pred'] = total_pred
+    df['prob'] = total_pred
+    df['pred'] = np.where(total_pred < 0.5, 1, 0)
     df['tag'] = [tag for _ in range(len(total_pred))]
+    df['success'] = df['label'] == df['pred']
+    df['dist'] = total_dist
+    
+    df = df[df.dist >= 0.005]
+    
     df.to_csv(save_csv, index = False)
     
     return
