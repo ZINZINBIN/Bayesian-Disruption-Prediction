@@ -456,5 +456,5 @@ if __name__ == "__main__":
         0.5,
     )
     
-    print("Best trial test f1-score:{:.3f}, test AUC:{:.3f}".format(test_f1, test_auc))
+    print("Best trial test f1-score:{:.3f}".format(test_f1))
     ray.shutdown()
