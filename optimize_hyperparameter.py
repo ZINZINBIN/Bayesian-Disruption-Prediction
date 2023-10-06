@@ -448,7 +448,7 @@ if __name__ == "__main__":
     
     best_model.load_state_dict(model_state) 
     
-    test_loss, test_f1, test_auc = evaluate(
+    test_loss, test_f1 = evaluate(
         test_loader,
         best_model,
         loss_fn,
