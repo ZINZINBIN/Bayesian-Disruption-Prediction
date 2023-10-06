@@ -1,5 +1,7 @@
-python3 train_bayes_model.py --gpu_num 2 --mode "TQ" --num_epoch 256 --dist 1
+# python3 train_bayes_model.py --gpu_num 2 --mode "TQ" --num_epoch 256 --dist 1
+python3 train_bayes_model.py --gpu_num 2 --mode "TQ" --num_epoch 256 --dist 2
 python3 train_bayes_model.py --gpu_num 2 --mode "TQ" --num_epoch 256 --dist 3
+python3 train_bayes_model.py --gpu_num 2 --mode "TQ" --num_epoch 256 --dist 4
 python3 train_bayes_model.py --gpu_num 2 --mode "TQ" --num_epoch 256 --dist 5
 python3 train_bayes_model.py --gpu_num 2 --mode "TQ" --num_epoch 256 --dist 6
 python3 train_bayes_model.py --gpu_num 2 --mode "TQ" --num_epoch 256 --dist 7

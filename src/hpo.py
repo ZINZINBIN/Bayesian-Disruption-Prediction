@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore")
 
 def train_per_epoch(
     train_loader : DataLoader, 
-    model : torch.nn.Module,
+    model : Union[torch.nn.Module, torch.nn.DataParallel],
     optimizer : torch.optim.Optimizer,
     scheduler : Optional[torch.optim.lr_scheduler._LRScheduler],
     loss_fn : torch.nn.Module,
@@ -30,8 +30,6 @@ def train_per_epoch(
     ):
 
     model.train()
-    model.to(device)
-
     train_loss = 0
     total_pred = []
     total_label = []
@@ -81,14 +79,14 @@ def train_per_epoch(
 
 def valid_per_epoch(
     valid_loader : DataLoader, 
-    model : torch.nn.Module,
+    model : Union[torch.nn.Module, torch.nn.DataParallel],
     optimizer : torch.optim.Optimizer,
     loss_fn : torch.nn.Module,
     device : str = "cpu",
     ):
 
     model.eval()
-    model.to(device)
+    # model.to(device)
     valid_loss = 0
 
     total_pred = []
@@ -285,7 +283,7 @@ def train_DRW(
 
 def evaluate(
     test_loader : DataLoader, 
-    model : torch.nn.Module,
+    model : Union[torch.nn.Module, torch.nn.DataParallel],
     loss_fn : Optional[torch.nn.Module]= None,
     device : Optional[str] = "cpu",
     threshold : float = 0.5,
@@ -298,15 +296,13 @@ def evaluate(
 
     if device is None:
         device = torch.device("cuda:0")
-
-    model.to(device)
+                              
     model.eval()
-
+    
     total_size = 0
     
     for idx, data in enumerate(tqdm(test_loader, 'evaluation process')):
         with torch.no_grad():
-
             output = model(data)       
             loss = loss_fn(output, data['label'].to(device))
             test_loss += loss.item()

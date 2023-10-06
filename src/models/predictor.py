@@ -1,13 +1,13 @@
 import torch, math
 import torch.nn as nn
 import numpy as np
-from typing import Dict, Literal
+from typing import Dict, Literal, Optional
 from src.models.BNN import BayesLinear, variational_approximator
 from src.models.tcn import TCN, calc_seq_length
 from pytorch_model_summary import summary
 
 class Predictor(nn.Module):
-    def __init__(self, header_config:Dict, classifier_config:Dict, device : str):
+    def __init__(self, header_config:Dict, classifier_config:Dict, device : Optional[str] = None):
         super(Predictor, self).__init__()
         self.header_config = header_config
         self.header_list = nn.ModuleDict([
@@ -46,6 +46,7 @@ class Predictor(nn.Module):
     def forward(self, data:Dict[str, torch.Tensor]):
         
         x = []
+
         for key in self.header_config.keys():
             signal = data[key]
             signal_enc = self.header_list[key](signal.to(self.device))
@@ -119,6 +120,7 @@ class BayesianPredictor(nn.Module):
     def forward(self, data:Dict[str, torch.Tensor]):
         
         x = []
+        
         for key in self.header_config.keys():
             signal = data[key]
             signal_enc = self.header_list[key](signal.to(self.device))

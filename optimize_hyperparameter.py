@@ -101,7 +101,7 @@ def parsing():
     parser.add_argument("--use_weighting", type = bool, default = False)
     
     # Deffered Re-weighting
-    parser.add_argument("--use_DRW", type = bool, default = True)
+    parser.add_argument("--use_DRW", type = bool, default = False)
     parser.add_argument("--beta", type = float, default = 0.25)
     
     # loss type : CE, Focal, LDAM
@@ -241,7 +241,7 @@ else:
 if args['use_label_smoothing']:
     loss_fn = LabelSmoothingLoss(loss_fn, alpha = args['smoothing'], kl_weight = args['kl_weight'], classes = 2)
     
-def load_model(configuration:Dict):
+def load_model(configuration:Dict, device : str):
     
     header_config = {
         "efit":{
@@ -291,18 +291,18 @@ def train_for_hpo(
     valid_loader,
     ):
     
-    # define model
-    model = load_model(configuration)
-    
-    device = "cpu"
-    
     if torch.cuda.is_available():
         device = "cuda:{}".format(args['gpu_num'])
+        model = load_model(configuration, device)
         
         if torch.cuda.device_count() > 1 and args['use_multi_gpu']:
+            device = "cuda:0"
             model = torch.nn.DataParallel(model)
-
-    model.to(device)
+            
+        model.to(device)
+    else:
+        device = "cpu"    
+        model = load_model(configuration)
 
     # optimizer
     if args["optimizer"] == "SGD":
@@ -343,7 +343,7 @@ def train_for_hpo(
         )
         
     else:
-        train_loss, train_f1, valid_acc, valid_f1 = train(
+        train_loss, train_f1, valid_loss, valid_f1 = train(
             train_loader,
             valid_loader,
             model,
@@ -364,7 +364,8 @@ if __name__ == "__main__":
     os.environ["MASTER_PORT"] = "29500"
     
     num_samples = args['num_samples']
-    cpus_per_trial = 1
+    
+    cpus_per_trial = 16
     gpus_per_trial = 4
     
     # define model
@@ -410,7 +411,8 @@ if __name__ == "__main__":
     
     tune_reporter = CLIReporter(
         metric_columns=["loss", "f1_score", "training_iteration"],
-        parameter_columns=[key for key in model_argument.keys()]
+        parameter_columns=[key for key in model_argument.keys()],
+        sort_by_metric = True,
     )
     
     # the solution : https://stackoverflow.com/questions/69777578/the-actor-implicitfunc-is-too-large-error
@@ -425,7 +427,7 @@ if __name__ == "__main__":
         trainable,
         resources_per_trial={
             "cpu":cpus_per_trial, 
-            "gpu": gpus_per_trial
+            "gpu":gpus_per_trial
         },
         local_dir = checkpoint_dir,
         config = model_argument,
@@ -440,7 +442,7 @@ if __name__ == "__main__":
     
     print("Best trial config: {}".format(best_trial.config))
     
-    best_model = load_model(best_trial.config)
+    best_model = load_model(best_trial.config, device)
     best_model.to(device)
     
     best_checkpoint = best_trial.checkpoint
