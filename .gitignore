@@ -13,5 +13,8 @@ runs/*
 # ignore pycache
 __pycache__
 
+# ignore hpo_checkpoint
+hpo_checkpoint/*
+
 # results
 results/*

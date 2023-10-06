@@ -190,6 +190,7 @@ def integrated_gradients(inputs:Dict[str, torch.Tensor], model:nn.Module, target
 
 def compute_relative_importance(inputs:Dict[str, torch.Tensor], model:nn.Module, target_label_idx:Optional[int], baseline = None, steps:int = 50, device : str = 'cpu'):
     
+    model.train()
     IG = integrated_gradients(inputs, model, target_label_idx, baseline, steps, device)
     
     feat_imp = []

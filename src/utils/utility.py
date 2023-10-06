@@ -12,6 +12,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import RobustScaler, MinMaxScaler, StandardScaler
 from sklearn.base import BaseEstimator
 from src.config import Config
+from src.feature_importance import compute_relative_importance, plot_feature_importance
 import time
 
 config = Config()
@@ -131,14 +132,6 @@ def preparing_0D_dataset(
 
     return train, valid, test, scaler
     
-
-TS_COLS = [
-    '\\q95', '\\ipmhd', '\\kappa', 
-    '\\tritop', '\\tribot','\\betap','\\betan',
-    '\\li', '\\WTOT_DLM03', '\\ne_inter01', 
-    '\\TS_NE_CORE_AVG', '\\TS_TE_CORE_AVG'
-]
-
 # Multi sginal dataset for generating probability curve
 class MultiSignalDataset(Dataset):
     def __init__(
@@ -440,6 +433,9 @@ def generate_prob_curve_from_0D(
     tftsrt = data_disrupt[data_disrupt.shot == shot_num].t_flattop_start.values[0]
     tipminf = data_disrupt[data_disrupt.shot == shot_num].t_ip_min_fault.values[0]
     
+    t_disrupt = tTQend
+    t_current = tipminf
+    
     data_efit = data_efit[data_efit.shot == shot_num]
     data_ece = data_ece[data_ece.shot == shot_num]
     data_diag = data_diag[data_diag.shot == shot_num]
@@ -466,6 +462,9 @@ def generate_prob_curve_from_0D(
 
     prob_list = []
     is_disruption = []
+    feature_dict = None
+    is_feat_saved = False
+    data_for_feature = None
 
     model.to(device)
     model.eval()
@@ -490,7 +489,23 @@ def generate_prob_curve_from_0D(
             is_disruption.extend(
                 torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1].cpu().detach().numpy().tolist()
             )
-  
+            
+            t = dataset.time_slice[idx]
+            
+            if t >= t_disrupt and not is_feat_saved and np.where(probs[0] > 0.5,0,1) == 0:
+                data_for_feature = data
+                is_feat_saved = True
+                
+    if data_for_feature:
+        feature_dict = compute_relative_importance(
+            data_for_feature,
+            model,
+            0,
+            None,
+            8,
+            device
+        )
+    
     n_ftsrt = int(dataset.time_slice[0] // dt)
     time_slice = [v for v in dataset.time_slice]
     time_slice = np.linspace(0, dataset.time_slice[0] - dt, n_ftsrt).tolist() + time_slice 
@@ -501,13 +516,15 @@ def generate_prob_curve_from_0D(
 
     print("\n(Info) flat-top : {:.3f}(s) | thermal quench : {:.3f}(s) | current quench : {:.3f}(s)\n".format(tftsrt, tTQend, tipminf))
     
-    t_disrupt = tTQend
-    t_current = tipminf
-    
     # plot the disruption probability with plasma status
-    fig = plt.figure(figsize = (21, 8))
-    fig.suptitle("Disruption prediction with shot : {}".format(shot_num))
-    gs = GridSpec(nrows = 4, ncols = 3)
+    if feature_dict:
+        fig = plt.figure(figsize = (28, 8))
+        fig.suptitle("Disruption prediction with shot : {}".format(shot_num))
+        gs = GridSpec(nrows = 4, ncols = 4)
+    else:
+        fig = plt.figure(figsize = (21, 8))
+        fig.suptitle("Disruption prediction with shot : {}".format(shot_num))
+        gs = GridSpec(nrows = 4, ncols = 3)
     
     # EFIT plot : betap, internal inductance, q95, plasma current
     # plasma current
@@ -567,6 +584,14 @@ def generate_prob_curve_from_0D(
     ax_prob.set_ylim([0,1])
     ax_prob.set_xlim([0, max(time_slice) + dt * 8])
     ax_prob.legend(loc = 'upper right')
+    
+    if feature_dict:
+        ax_feat = fig.add_subplot(gs[:,3])
+        ax_feat.barh(list(feature_dict.keys()), list(feature_dict.values()))
+        ax_feat.set_yticks([i for i in range(len(list(feature_dict.keys())))], labels = list(feature_dict.keys()))
+        ax_feat.invert_yaxis()
+        ax_feat.set_ylabel('Input features')
+        ax_feat.set_xlabel('Relative feature importance')
     
     fig.tight_layout()
 

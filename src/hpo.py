@@ -7,6 +7,7 @@ from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
 from src.utils.EarlyStopping import EarlyStopping
+from src.models.BNN import compute_uncertainty_per_data
 from ray import tune
 from ray.air import session
 from sklearn.metrics import confusion_matrix, classification_report, f1_score
@@ -25,36 +26,26 @@ def train_per_epoch(
     scheduler : Optional[torch.optim.lr_scheduler._LRScheduler],
     loss_fn : torch.nn.Module,
     device : str = "cpu",
-    max_norm_grad : Optional[float] = None
+    max_norm_grad : Optional[float] = None,
     ):
 
     model.train()
     model.to(device)
 
     train_loss = 0
-
-    total_pred = np.array([])
-    total_label = np.array([])
+    total_pred = []
+    total_label = []
     total_size = 0
-
-    for batch_idx, (data, target) in enumerate(train_loader):
-        # check that the batch_size = 1, if batch_size = 1, skip the process        
-       
-        if data.size()[0] <=1 or not torch.isfinite(data).any():
-            print("train_per_epoch | warning : data nan occurs at batch_idx : {}".format(batch_idx))
-            break
+    
+    for batch_idx, data in enumerate(train_loader):
         
-        for param in model.parameters():
-            param.grad = None
+        optimizer.zero_grad()
+        output = model(data)
+        loss = loss_fn(output, data['label'].to(device))
         
-        output = model(data.to(device))
-        loss = loss_fn(output, target.to(device))
-            
-        # if loss == nan, we have to break the training process
-        # then, nan does not affect the weight of the parameters
         if not torch.isfinite(loss):
-            print("train_per_epoch | Warning : loss nan occurs at batch_idx : {}".format(batch_idx))
-            break
+            print("train_per_epoch | warning : loss nan occurs at batch_idx : {}".format(batch_idx))
+            continue
         else:
             loss.backward()
 
@@ -69,11 +60,14 @@ def train_per_epoch(
         pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
         total_size += pred.size(0) 
         
-        total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
-        total_label = np.concatenate((total_label, target.cpu().numpy().reshape(-1,)))
+        total_pred.append(pred.view(-1,1))
+        total_label.append(data['label'].view(-1,1))
         
     if scheduler:
         scheduler.step()
+        
+    total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
+    total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
 
     if total_size > 0:
         train_loss /= total_size
@@ -82,8 +76,6 @@ def train_per_epoch(
     else:
         train_loss = 0
         train_f1 = 0
-    
-    model.cpu()
 
     return train_loss, train_f1
 
@@ -99,28 +91,31 @@ def valid_per_epoch(
     model.to(device)
     valid_loss = 0
 
-    total_pred = np.array([])
-    total_label = np.array([])
+    total_pred = []
+    total_label = []
     total_size = 0
 
-    for batch_idx, (data, target) in enumerate(valid_loader):
+    for batch_idx, data in enumerate(valid_loader):
         with torch.no_grad():
             
             optimizer.zero_grad()
-            output = model(data.to(device))
-            loss = loss_fn(output, target.to(device))
+            
+            output = model(data)
+          
+            loss = loss_fn(output, data['label'].to(device))
     
             valid_loss += loss.item()
             pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
             total_size += pred.size(0)
 
-            total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
-            total_label = np.concatenate((total_label, target.cpu().numpy().reshape(-1,)))
+            total_pred.append(pred.view(-1,1))
+            total_label.append(data['label'].view(-1,1))
+
+    total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
+    total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
 
     valid_loss /= total_size
     valid_f1 = f1_score(total_label, total_pred, average = "macro")
-    
-    model.cpu()
 
     return valid_loss, valid_f1
 
@@ -298,8 +293,8 @@ def evaluate(
 
     test_loss = 0
     test_f1 = 0
-    total_pred = np.array([])
-    total_label = np.array([])
+    total_pred = []
+    total_label = []
 
     if device is None:
         device = torch.device("cuda:0")
@@ -308,35 +303,36 @@ def evaluate(
     model.eval()
 
     total_size = 0
-
-    for idx, (data, target) in enumerate(test_loader):
-        with torch.no_grad():
-            output = model(data.to(device))
-            loss = loss_fn(output, target.to(device))
     
+    for idx, data in enumerate(tqdm(test_loader, 'evaluation process')):
+        with torch.no_grad():
+
+            output = model(data)       
+            loss = loss_fn(output, data['label'].to(device))
             test_loss += loss.item()
-            # pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
             
             pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
             pred = torch.logical_not((pred > torch.FloatTensor([threshold]).to(device)))
             total_size += pred.size(0)
             
             pred_normal = torch.nn.functional.softmax(output, dim = 1)[:,1].detach()
-            
-            total_pred = np.concatenate((total_pred, pred_normal.cpu().numpy().reshape(-1,)))
-            total_label = np.concatenate((total_label, target.cpu().numpy().reshape(-1,)))
+
+            total_pred.append(pred_normal.view(-1,1))
+            total_label.append(data['label'].view(-1,1))
             
     test_loss /= (idx + 1)
-    total_pred = np.nan_to_num(total_pred, copy = True, nan = 0, posinf = 1.0, neginf = 0)
-    lr_probs = total_pred
-    total_pred = np.where(total_pred > 1 - threshold, 1, 0)
     
+    total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
+    total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
+
+    # method 2 : compute f1, auc, roc and classification report
+    # data clipping / postprocessing for ignoring nan, inf, too large data
+    total_pred = np.nan_to_num(total_pred, copy = True, nan = 0, posinf = 1.0, neginf = 0)
+    total_pred = np.where(total_pred > 1 - threshold, 1, 0)
+   
     # f1 score
     test_f1 = f1_score(total_label, total_pred, average = "macro")
     
-    # auc score
-    test_auc = roc_auc_score(total_label, total_pred, average='macro')
-    
     model.cpu()
     
-    return test_loss, test_f1, test_auc
+    return test_loss, test_f1

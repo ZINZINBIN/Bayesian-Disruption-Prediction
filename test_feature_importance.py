@@ -228,6 +228,7 @@ if __name__ == "__main__":
     
     for idx, data in enumerate(test_loader):
         
+        # LM causes
         if data['label'].numpy() == 0 and data['shot_num'].item() in [20941, 20945, 20947, 20948, 20949, 20951]:
             test_input = data
             test_shot = int(data['shot_num'].item())

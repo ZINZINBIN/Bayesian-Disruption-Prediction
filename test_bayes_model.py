@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
 from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
 from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_2D_decision_boundary
-from src.evaluate import evaluate
+from src.evaluate import evaluate, evaluate_detail
 from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
 from src.models.predictor import BayesianPredictor
 from src.feature_importance import compute_permute_feature_importance
@@ -258,9 +258,9 @@ if __name__ == "__main__":
         optimizer,
         loss_fn,
         device,
-        save_conf = os.path.join(save_dir, "{}_valid_confusion_use_uncertainty.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_valid_eval_use_uncertainty.txt".format(tag)),
-        use_uncertainty=True
+        save_conf = os.path.join(save_dir, "{}_valid_confusion.png".format(tag)),
+        save_txt = os.path.join(save_dir, "{}_valid_eval.txt".format(tag)),
+        use_uncertainty=False
     )
     
     print("\nEvaluation:test-dataset\n")
@@ -275,6 +275,16 @@ if __name__ == "__main__":
         use_uncertainty=True
     )
     
+    print("\nEvaluation per shot\n")
+    evaluate_detail(
+        train_loader,
+        valid_loader,
+        test_loader,
+        model,
+        device,
+        save_csv = os.path.join(save_dir, "{}_eval_detail.csv".format(tag)),
+        tag = tag
+    )
     
     # Additional analyzation
     print("\n====================== Visualization process ======================\n")
