@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import argparse
+import matplotlib.pyplot as plt
 from src.dataset import MultiSignalDataset
 from torch.utils.data import DataLoader, RandomSampler
 from src.utils.utility import preparing_0D_dataset, seed_everything
@@ -157,6 +158,20 @@ if __name__ == "__main__":
     # dataset setup 
     train_list, valid_list, test_list, scaler_list = preparing_0D_dataset(config.filepath, None, args['scaler'], args['test_shot_num'])
     
+    # 23.10.11 : LM shots considered
+    '''
+    lm_shot = [20941, 20945, 20947, 20948, 20949, 20951, 20975, 20977]
+    for key in test_list.keys():
+        buffer = [train_list[key], valid_list[key], test_list[key]]
+        buffer = pd.concat(buffer, axis = 0)
+        test_list[key] = buffer[buffer.shot.isin(lm_shot)]
+    '''
+        
+    for key in test_list.keys():
+        buffer = [train_list[key], valid_list[key], test_list[key]]
+        buffer = pd.concat(buffer, axis = 0)
+        test_list[key] = buffer
+    
     print("================= Dataset information =================")
     test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test')
     test_data.get_shot_num = True
@@ -176,6 +191,7 @@ if __name__ == "__main__":
 
     test_data = None
     test_label = None
+    '''
     
     for idx, data in enumerate(test_loader):
         
@@ -189,7 +205,6 @@ if __name__ == "__main__":
             if pred == 1:
                 break
     
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1,1)
     feat_imp = compute_relative_importance(test_input, model, 0, None, 8, device)
     ax.barh(list(feat_imp.keys()), list(feat_imp.values()))
@@ -225,6 +240,7 @@ if __name__ == "__main__":
     plt.suptitle("Relative importance - False alarm case, shot : {}".format(test_shot))
     fig.tight_layout()
     plt.savefig("./results/feature_importance-FP.png")
+    '''
     
     for idx, data in enumerate(test_loader):
         
@@ -250,3 +266,61 @@ if __name__ == "__main__":
     plt.suptitle("Relative importance - True positive case, shot : {}".format(test_shot))
     fig.tight_layout()
     plt.savefig("./results/feature_importance-TP.png")
+    
+    
+    # feature importance computation for test dataset
+    cases = []
+    shots = []
+    aus = []
+    eus = []
+    preds = []
+    
+    results = {
+        "cases":[],
+        "shots":[],
+        "aus":[],
+        "eus":[],
+        "preds":[],
+    }
+    
+    for key in feat_imp.keys():
+        results[key] = []
+    
+    from tqdm.auto import tqdm
+    for idx, data in enumerate(tqdm(test_loader, 'feature importance computation results prepared...')):
+        test_input = data
+        test_shot = int(data['shot_num'].item())
+        test_label = data['label'].numpy()
+        pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
+        pred = np.where(pred > 0.5, 1, 0)
+        
+        if test_label == 1 and pred == 1:
+            continue
+        
+        feat_imp = compute_relative_importance(test_input, model, 0, None, 8, device)
+        
+        for key in feat_imp.keys():
+            results[key].append(feat_imp[key])
+        
+        test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
+        au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
+        results['aus'].append(au)
+        results['eus'].append(eu)
+        results['preds'].append(test_pred)
+        results['shots'].append(test_shot)
+        
+        if test_label == 0:
+            # TN
+            if pred == 1:
+                results['cases'].append("TN")
+            # TP
+            else:
+                results['cases'].append("TP") 
+        else:
+            # FP
+            if pred == 0:
+                results['cases'].append("FP")
+    
+    results = pd.DataFrame(results)
+    # results.to_pickle("./results/analysis_feature_importance_test.pkl") 
+    results.to_pickle("./results/analysis_feature_importance_total.pkl") 

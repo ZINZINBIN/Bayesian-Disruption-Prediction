@@ -49,6 +49,7 @@ class Config():
             "diag":DIAG
       }
       
+      # default
       header_config = {
             "efit":{
                   "num_inputs":len(EFIT + EFIT_FE),
@@ -86,7 +87,46 @@ class Config():
             "prior_sigma1":1.0,
             "prior_sigma2":0.0025,
       }
-
+      
+      # hyperparameter optimized 
+      optim_header_config = {
+            "efit":{
+                  "num_inputs":len(EFIT + EFIT_FE),
+                  "hidden_dim":128,
+                  "num_channels":[128] * 4,
+                  "kernel_size":2,
+                  "dropout":0.15,
+                  "dilation_size":calc_dilation(2, 3, 4, 1024),
+                  "seq_len":10
+            },
+            "ece":{
+                  "num_inputs":len(ECE),
+                  "hidden_dim":128,
+                  "num_channels":[128] * 4,
+                  "kernel_size":2,
+                  "dropout":0.025,
+                  "dilation_size":calc_dilation(2, 3, 4, 1024),
+                  "seq_len":50
+            },
+            "diag":{
+                  "num_inputs":len(DIAG),
+                  "hidden_dim":128,
+                  "num_channels":[128]*4,
+                  "kernel_size":2,
+                  "dropout":0.25,
+                  "dilation_size":calc_dilation(2, 3, 4, 1024 * 8),
+                  "seq_len":50
+            }
+      }
+      
+      optim_classifier_config = {
+            "cls_dim" : 256,
+            "n_classes":2,
+            "prior_pi":0.368,
+            "prior_sigma1":1.25,
+            "prior_sigma2":0.0025,
+      }
+      
       # Thomson scattering
       TS_TE_CORE = ['\\TS_CORE1:CORE1_TE', '\\TS_CORE2:CORE2_TE', '\\TS_CORE3:CORE3_TE', '\\TS_CORE4:CORE4_TE', '\\TS_CORE5:CORE5_TE', '\\TS_CORE6:CORE6_TE', '\\TS_CORE7:CORE7_TE', '\\TS_CORE8:CORE8_TE', '\\TS_CORE9:CORE9_TE', '\\TS_CORE10:CORE10_TE', '\\TS_CORE11:CORE11_TE', '\\TS_CORE12:CORE12_TE', '\\TS_CORE13:CORE13_TE', '\\TS_CORE14:CORE14_TE']
       TS_TE_EDGE = ['\\TS_EDGE1:EDGE1_TE', '\\TS_EDGE2:EDGE2_TE', '\\TS_EDGE3:EDGE3_TE', '\\TS_EDGE4:EDGE4_TE', '\\TS_EDGE5:EDGE5_TE', '\\TS_EDGE6:EDGE6_TE', '\\TS_EDGE7:EDGE7_TE', '\\TS_EDGE8:EDGE8_TE', '\\TS_EDGE9:EDGE9_TE', '\\TS_EDGE10:EDGE10_TE', '\\TS_EDGE11:EDGE11_TE', '\\TS_EDGE12:EDGE12_TE', '\\TS_EDGE13:EDGE13_TE', '\\TS_EDGE14:EDGE14_TE']

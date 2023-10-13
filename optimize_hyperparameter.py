@@ -60,7 +60,7 @@ def parsing():
     parser.add_argument("--use_multi_gpu", type = bool, default = False)
     
     # mode : predicting thermal quench vs current quench
-    parser.add_argument("--mode", type = str, default = 'CQ', choices=['TQ','CQ'])
+    parser.add_argument("--mode", type = str, default = 'TQ', choices=['TQ','CQ'])
 
     # batch size / sequence length / epochs / distance / num workers / pin memory use
     parser.add_argument("--batch_size", type = int, default = 100)
@@ -73,7 +73,7 @@ def parsing():
     parser.add_argument("--pin_memory", type = bool, default = True)
     
     # num samples
-    parser.add_argument("--num_samples", type = int, default = 16)
+    parser.add_argument("--num_samples", type = int, default = 256)
     
     # scaler type
     parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "Robust")
@@ -89,8 +89,8 @@ def parsing():
     
     # early stopping
     parser.add_argument('--early_stopping', type = bool, default = True)
-    parser.add_argument("--early_stopping_patience", type = int, default = 40)
-    parser.add_argument("--early_stopping_verbose", type = bool, default = True)
+    parser.add_argument("--early_stopping_patience", type = int, default = 32)
+    parser.add_argument("--early_stopping_verbose", type = bool, default = False)
     parser.add_argument("--early_stopping_delta", type = float, default = 1e-3)
 
     # imbalanced dataset processing
@@ -120,7 +120,7 @@ def parsing():
     parser.add_argument("--focal_gamma", type = float, default = 2.0)
     
     # monitoring the training process
-    parser.add_argument("--verbose", type = int, default = 16)
+    parser.add_argument("--verbose", type = int, default = 128)
     
     args = vars(parser.parse_args())
 
@@ -373,27 +373,27 @@ if __name__ == "__main__":
         
         "efit-hidden_dim":tune.choice([32, 64, 128, 256]),
         "efit-channels":tune.choice([32, 64, 128, 256]),
-        "efit-kernel_size":tune.choice([2,3,4,5]),
+        "efit-kernel_size":tune.choice([2,3,4]),
         "efit-dropout":tune.loguniform(1e-2, 5e-1),
-        "efit-dilation_size":tune.choice([2,3,4]),
+        "efit-dilation_size":tune.choice([2,3]),
         "efit-nlevel":tune.choice([2,3,4,5]),
-        "efit-nrecept":tune.choice([512, 1024, 1024 * 8, 1024 * 16]),
+        "efit-nrecept":tune.choice([1024, 1024 * 8, 1024 * 16]),
 
         "ece-hidden_dim":tune.choice([32, 64, 128, 256]),
         "ece-channels":tune.choice([32, 64, 128, 256]),
-        "ece-kernel_size":tune.choice([2,3,4,5]),
+        "ece-kernel_size":tune.choice([2,3,4]),
         "ece-dropout":tune.loguniform(1e-2, 5e-1),
-        "ece-dilation_size":tune.choice([2,3,4]),
+        "ece-dilation_size":tune.choice([2,3]),
         "ece-nlevel":tune.choice([2,3,4,5]),
-        "ece-nrecept":tune.choice([512, 1024, 1024 * 8, 1024 * 16]),
+        "ece-nrecept":tune.choice([1024, 1024 * 8, 1024 * 16]),
 
         "diag-hidden_dim":tune.choice([32, 64, 128, 256]),
         "diag-channels":tune.choice([32, 64, 128, 256]),
-        "diag-kernel_size":tune.choice([2,3,4,5]),
+        "diag-kernel_size":tune.choice([2,3,4]),
         "diag-dropout":tune.loguniform(1e-2, 5e-1),
-        "diag-dilation_size":tune.choice([2,3,4]),
+        "diag-dilation_size":tune.choice([2,3]),
         "diag-nlevel":tune.choice([2,3,4,5]),
-        "diag-nrecept":tune.choice([512, 1024, 1024 * 8, 1024 * 16]),
+        "diag-nrecept":tune.choice([1024, 1024 * 8, 1024 * 16]),
        
         "cls-cls_dim" : tune.choice([32, 64, 128, 256]),
         "cls-prior_pi":tune.loguniform(0.2, 0.5),

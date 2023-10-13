@@ -145,7 +145,7 @@ def train(
     else:
         early_stopping = None
 
-    for epoch in tqdm(range(num_epoch), desc = "training process for hyperparameter optimization"):
+    for epoch in range(num_epoch):
 
         train_loss, train_f1 = train_per_epoch(
             train_loader, 
@@ -234,7 +234,7 @@ def train_DRW(
     else:
         early_stopping = None
     
-    for epoch in tqdm(range(num_epoch), desc = "training process(DRW) for hyperparameter optimization"):
+    for epoch in range(num_epoch):
 
         per_cls_weights = _update_per_cls_weights(epoch, betas, cls_num_list)
 

@@ -192,21 +192,6 @@ def compute_ensemble_probability(model : nn.Module, input : Dict[str, torch.Tens
         
     outputs = model.predict_per_sample(input_n_repeat)
     probs = torch.nn.functional.softmax(outputs, dim = 1)
-    
-    '''
-    # 일단 여러번 연산해서 얻는 구조로 진행
-    for key in input.keys():
-        if input[key].ndim == 2:
-            input[key] = input[key].unsqueeze(0)
-    
-    probs = torch.zeros((n_samples, 2), device = device)
-    
-    for idx in range(n_samples):
-        output = model(input)
-        prob = torch.nn.functional.softmax(output, dim = 1)
-        probs[idx,:] = prob
-        
-    '''
     probs = probs.detach().cpu().numpy() 
     
     return probs

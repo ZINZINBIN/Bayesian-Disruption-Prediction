@@ -176,6 +176,40 @@ if __name__ == "__main__":
     test_data = None
     test_label = None
     
+    import matplotlib.pyplot as plt
+    from typing import Optional
+    def plot_output_distribution(pred : np.ndarray, title : Optional[str] = None, save_dir : Optional[str] = None):
+    
+        preds_disrupt = pred[:,0]
+        preds_normal = pred[:,1]
+        
+        fig, axes = plt.subplots(1,2)
+        counts, bins = np.histogram(preds_disrupt.reshape(-1,))
+        axes[0].hist(bins[:-1], bins = bins, weights = counts, color = 'gray')
+        
+        counts, bins = np.histogram(preds_normal.reshape(-1,))
+        axes[1].hist(bins[:-1], bins = bins, weights = counts, color = 'gray')
+        
+        axes[0].set_xlabel("Output(probs)")
+        axes[0].set_xlim([0,1.0])
+        axes[0].set_ylabel('n-samples')
+        axes[0].set_title("Disruption")
+        
+        axes[1].set_xlabel("Output(probs)")
+        axes[1].set_xlim([0,1.0])
+        axes[1].set_ylabel('n-samples')
+        axes[1].set_title('Normal')
+        
+        if title:
+            plt.suptitle(title)
+            
+        fig.tight_layout()
+        
+        if save_dir:
+            plt.savefig(save_dir)
+            
+        return fig, axes
+    
     for idx, data in enumerate(test_loader):
         
         if data['label'].numpy() == 0:
@@ -191,34 +225,13 @@ if __name__ == "__main__":
     test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
     au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
     
-    # print("test_pred : ", test_pred)
     print("\n====================== True Negative case ======================\n")
     print("true label : ", test_label)
     print("test shot : ", test_shot)
     print("aleatoric uncertainty: ", au)
     print("epistemic uncertainty: ", eu)
     
-    preds_disrupt = test_pred[:,0]
-    preds_normal = test_pred[:,1]
-    
-    import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1,2)
-    axes[0].hist(preds_disrupt.reshape(-1,), bins = 32, color = 'gray')
-    axes[1].hist(preds_normal.reshape(-1,), bins = 32, color = 'gray')
-    
-    axes[0].set_xlabel("Output(probs)")
-    axes[0].set_xlim([0,1.0])
-    axes[0].set_ylabel('n-samples')
-    axes[0].set_title("Disruption")
-    
-    axes[1].set_xlabel("Output(probs)")
-    axes[1].set_xlim([0,1.0])
-    axes[1].set_ylabel('n-samples')
-    axes[1].set_title('Normal')
-    
-    plt.suptitle("Disruptive phase - Missing alarm case, shot : {}".format(test_shot))
-    fig.tight_layout()
-    plt.savefig("./results/test-TN.png")
+    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - Missing alarm case, shot : {}".format(test_shot), "./results/test-TN.png")
     
     for idx, data in enumerate(test_loader):
         
@@ -242,27 +255,7 @@ if __name__ == "__main__":
     print("aleatoric uncertainty: ", au)
     print("epistemic uncertainty: ", eu)
     
-    preds_disrupt = test_pred[:,0]
-    preds_normal = test_pred[:,1]
-    
-    import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1,2)
-    axes[0].hist(preds_disrupt.reshape(-1,), bins = 32, color = 'gray')
-    axes[1].hist(preds_normal.reshape(-1,), bins = 32, color = 'gray')
-    
-    axes[0].set_xlabel("Output(probs)")
-    axes[0].set_xlim([0,1.0])
-    axes[0].set_ylabel('n-samples')
-    axes[0].set_title("Disruption")
-    
-    axes[1].set_xlabel("Output(probs)")
-    axes[1].set_xlim([0,1.0])
-    axes[1].set_ylabel('n-samples')
-    axes[1].set_title('Normal')
-    
-    plt.suptitle("Normal phase - False alarm case, shot : {}".format(test_shot))
-    fig.tight_layout()
-    plt.savefig("./results/test-FP.png")
+    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - False alarm case, shot : {}".format(test_shot), "./results/test-FP.png")
     
     for idx, data in enumerate(test_loader):
         
@@ -286,24 +279,106 @@ if __name__ == "__main__":
     print("aleatoric uncertainty: ", au)
     print("epistemic uncertainty: ", eu)
     
-    preds_disrupt = test_pred[:,0]
-    preds_normal = test_pred[:,1]
+    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - True Positive case, shot : {}".format(test_shot), "./results/test-TP.png")
     
-    import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(1,2)
-    axes[0].hist(preds_disrupt.reshape(-1,), bins = 32, color = 'gray')
-    axes[1].hist(preds_normal.reshape(-1,), bins = 32, color = 'gray')
+    # uncertainty computation for test dataset
+    aus = []
+    eus = []
+    preds = []
+    shots = []
+    cases = []
     
-    axes[0].set_xlabel("Output(probs)")
-    axes[0].set_xlim([0,1.0])
-    axes[0].set_ylabel('n-samples')
-    axes[0].set_title("Disruption")
+    from tqdm.auto import tqdm
     
-    axes[1].set_xlabel("Output(probs)")
-    axes[1].set_xlim([0,1.0])
-    axes[1].set_ylabel('n-samples')
-    axes[1].set_title('Normal')
+    for idx, data in enumerate(tqdm(test_loader, 'uncertainty analysis results prepared...')):
+        test_input = data
+        test_shot = int(data['shot_num'].item())
+        test_label = data['label'].numpy()
+        pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
+        pred = np.where(pred > 0.5, 1, 0)
+        
+        if test_label == 1 and pred == 1:
+            continue
+        
+        test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
+        au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
+        aus.append(au)
+        eus.append(eu)
+        preds.append(test_pred)
+        shots.append(test_shot)
+        
+        if test_label == 0:
+            # TN
+            if pred == 1:
+                cases.append("TN")
+            # TP
+            else:
+                cases.append("TP") 
+        else:
+            # FP
+            if pred == 0:
+                cases.append("FP")
     
-    plt.suptitle("Disruptive phase - True Positive case, shot : {}".format(test_shot))
-    fig.tight_layout()
-    plt.savefig("./results/test-TP.png")
+    results = {
+        "au" : aus,
+        "eu" : eus,
+        "preds" : preds,
+        "shot" : shots,
+        "cases" : cases
+    }
+    results = pd.DataFrame(results)
+    results.to_pickle("./results/analysis_uncertainty_test.pkl")    
+    
+    # uncertainty computation for training dataset
+    train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train')
+    train_data.get_shot_num = True
+    train_sampler = RandomSampler(train_data)
+    train_loader = DataLoader(train_data, batch_size = 1, sampler=train_sampler, num_workers = 1, pin_memory=args["pin_memory"])
+    
+    aus = []
+    eus = []
+    preds = []
+    shots = []
+    cases = []
+    
+    from tqdm.auto import tqdm
+    
+    for idx, data in enumerate(tqdm(train_loader, 'uncertainty analysis results prepared...')):
+        test_input = data
+        test_shot = int(data['shot_num'].item())
+        test_label = data['label'].numpy()
+        pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
+        pred = np.where(pred > 0.5, 1, 0)
+        
+        if test_label == 1 and pred == 1:
+            continue
+        
+        test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
+        au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
+        aus.append(au)
+        eus.append(eu)
+        preds.append(test_pred)
+        shots.append(test_shot)
+        
+        if test_label == 0:
+            # TN
+            if pred == 1:
+                cases.append("TN")
+            # TP
+            else:
+                cases.append("TP") 
+        else:
+            # FP
+            if pred == 0:
+                cases.append("FP")
+    
+    results = {
+        "au" : aus,
+        "eu" : eus,
+        "preds" : preds,
+        "shot" : shots,
+        "cases" : cases
+    }
+    
+    results = pd.DataFrame(results)
+    results.to_pickle("./results/analysis_uncertainty_train.pkl")    
