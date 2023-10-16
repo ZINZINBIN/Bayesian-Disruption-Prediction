@@ -231,7 +231,7 @@ if __name__ == "__main__":
     print("aleatoric uncertainty: ", au)
     print("epistemic uncertainty: ", eu)
     
-    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - Missing alarm case, shot : {}".format(test_shot), "./results/test-TN.png")
+    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - Missing alarm case, shot : {}".format(test_shot), "./results/test-FN.png")
     
     for idx, data in enumerate(test_loader):
         
@@ -308,9 +308,9 @@ if __name__ == "__main__":
         shots.append(test_shot)
         
         if test_label == 0:
-            # TN
+            # FN
             if pred == 1:
-                cases.append("TN")
+                cases.append("FN")
             # TP
             else:
                 cases.append("TP") 
@@ -361,9 +361,9 @@ if __name__ == "__main__":
         shots.append(test_shot)
         
         if test_label == 0:
-            # TN
+            # FN
             if pred == 1:
-                cases.append("TN")
+                cases.append("FN")
             # TP
             else:
                 cases.append("TP") 

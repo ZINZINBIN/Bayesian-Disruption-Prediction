@@ -215,7 +215,7 @@ if __name__ == "__main__":
     
     plt.suptitle("Relative importance - Missing alarm case, shot : {}".format(test_shot))
     fig.tight_layout()
-    plt.savefig("./results/feature_importance-TN.png")
+    plt.savefig("./results/feature_importance-FN.png")
     
     for idx, data in enumerate(test_loader):
         
@@ -310,9 +310,9 @@ if __name__ == "__main__":
         results['shots'].append(test_shot)
         
         if test_label == 0:
-            # TN
+            # FN
             if pred == 1:
-                results['cases'].append("TN")
+                results['cases'].append("FN")
             # TP
             else:
                 results['cases'].append("TP") 
