@@ -297,8 +297,10 @@ if __name__ == "__main__":
         pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
         pred = np.where(pred > 0.5, 1, 0)
         
+        '''
         if test_label == 1 and pred == 1:
             continue
+        '''
         
         test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
         au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
@@ -318,6 +320,9 @@ if __name__ == "__main__":
             # FP
             if pred == 0:
                 cases.append("FP")
+            # TN
+            else:
+                cases.append("TN")
     
     results = {
         "au" : aus,
@@ -327,8 +332,9 @@ if __name__ == "__main__":
         "cases" : cases
     }
     results = pd.DataFrame(results)
-    results.to_pickle("./results/analysis_uncertainty_test.pkl")    
+    results.to_pickle("./results/analysis_uncertainty_test_{}.pkl".format(tag))    
     
+    '''
     # uncertainty computation for training dataset
     train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train')
     train_data.get_shot_num = True
@@ -382,3 +388,4 @@ if __name__ == "__main__":
     
     results = pd.DataFrame(results)
     results.to_pickle("./results/analysis_uncertainty_train.pkl")    
+    '''

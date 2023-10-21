@@ -144,7 +144,8 @@ def train(
     is_early_stopping : bool = False,
     early_stopping_verbose : bool = True,
     early_stopping_patience : int = 12,
-    early_stopping_delta : float = 1e-3
+    early_stopping_delta : float = 1e-3,
+    scaler_type = None
     ):
 
     train_loss_list = []
@@ -238,6 +239,7 @@ def train(
                         dist = test_for_check_per_epoch.dataset.dist,
                         dt = 0.01,
                         mode = test_for_check_per_epoch.dataset.mode,
+                        scaler_type=scaler_type
                     )
                     
                     model.train()

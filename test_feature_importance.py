@@ -191,7 +191,6 @@ if __name__ == "__main__":
 
     test_data = None
     test_label = None
-    '''
     
     for idx, data in enumerate(test_loader):
         
@@ -240,7 +239,7 @@ if __name__ == "__main__":
     plt.suptitle("Relative importance - False alarm case, shot : {}".format(test_shot))
     fig.tight_layout()
     plt.savefig("./results/feature_importance-FP.png")
-    '''
+    
     
     for idx, data in enumerate(test_loader):
         
@@ -266,7 +265,6 @@ if __name__ == "__main__":
     plt.suptitle("Relative importance - True positive case, shot : {}".format(test_shot))
     fig.tight_layout()
     plt.savefig("./results/feature_importance-TP.png")
-    
     
     # feature importance computation for test dataset
     cases = []

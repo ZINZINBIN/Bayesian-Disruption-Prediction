@@ -255,7 +255,8 @@ if __name__ == "__main__":
         is_early_stopping = args['early_stopping'],
         early_stopping_verbose = args['early_stopping_verbose'],
         early_stopping_patience = args['early_stopping_patience'],
-        early_stopping_delta = args['early_stopping_delta']
+        early_stopping_delta = args['early_stopping_delta'],
+        scaler_type = args['scaler']
     )
     
     # plot the learning curve
@@ -331,4 +332,5 @@ if __name__ == "__main__":
         dist = args['dist'],
         dt = 0.01,
         mode = args['mode'], 
+        scaler_type = args['scaler']
     )

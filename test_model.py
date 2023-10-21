@@ -334,4 +334,5 @@ if __name__ == "__main__":
         dist = args['dist'],
         dt = 0.01,
         mode = args['mode'], 
+        scaler_type = args['scaler']
     )

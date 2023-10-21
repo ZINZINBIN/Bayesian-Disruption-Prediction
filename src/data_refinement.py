@@ -3,7 +3,7 @@ import numpy as np
 import warnings
 from tqdm.auto import tqdm
 from src.config import Config
-from src.utils.compute import compute_GreenWald_density, compute_tau_e
+from src.utils.compute import compute_GreenWald_density, compute_tau_e, compute_Troyon_beta
 
 warnings.filterwarnings(action = 'ignore')
 
@@ -249,6 +249,7 @@ if __name__ == "__main__":
     
     # feature engineering
     compute_GreenWald_density(df_efit)
+    compute_Troyon_beta(df_efit)
     
     # saving file
     print('\n',"="*50)

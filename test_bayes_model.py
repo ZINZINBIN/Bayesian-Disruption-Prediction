@@ -6,7 +6,7 @@ import argparse
 from src.dataset import MultiSignalDataset
 from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
-from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
+from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything, generate_3D_feature_importance, generate_bayes_prob_curve
 from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_2D_decision_boundary
 from src.evaluate import evaluate, evaluate_detail
 from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
@@ -239,6 +239,7 @@ if __name__ == "__main__":
     print("\n====================== evaluation process ======================\n")
     model.load_state_dict(torch.load(save_best_dir))
     
+    '''
     print("\nEvaluation:train-dataset\n")
     test_loss, test_acc, test_f1 = evaluate(
         train_loader,
@@ -322,15 +323,17 @@ if __name__ == "__main__":
             
     except:
         print("{} : visualize 2D latent space doesn't work due to stability error".format(tag))
+    '''
     
     # plot probability curve
     test_shot_num = args['test_shot_num']
     print("\n====================== Probability curve generation process ======================\n")
-    generate_prob_curve_from_0D(
+    
+    generate_bayes_prob_curve(
         filepath = config.filepath,
         model = model, 
         device = device,
-        save_dir = os.path.join(save_dir, "{}_probs_curve_{}.png".format(tag, test_shot_num)),
+        save_dir = os.path.join(save_dir, "{}_bayes_probs_curve_{}.png".format(tag, test_shot_num)),
         shot_num = test_shot_num,
         seq_len_efit = args['seq_len_efit'], 
         seq_len_ece = args['seq_len_ece'],
@@ -338,5 +341,20 @@ if __name__ == "__main__":
         dist = args['dist'],
         dt = 0.01,
         mode = args['mode'], 
+        scaler_type = args['scaler']
     )
     
+    generate_3D_feature_importance(
+        filepath = config.filepath,
+        model = model, 
+        device = device,
+        save_dir = os.path.join(save_dir, "{}_feature_importance_3D_{}.png".format(tag, test_shot_num)),
+        shot_num = test_shot_num,
+        seq_len_efit = args['seq_len_efit'], 
+        seq_len_ece = args['seq_len_ece'],
+        seq_len_diag = args['seq_len_diag'], 
+        dist = args['dist'],
+        dt = 0.01,
+        mode = args['mode'], 
+        scaler_type = args['scaler']
+    )

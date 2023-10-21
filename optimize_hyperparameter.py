@@ -64,7 +64,7 @@ def parsing():
 
     # batch size / sequence length / epochs / distance / num workers / pin memory use
     parser.add_argument("--batch_size", type = int, default = 100)
-    parser.add_argument("--num_epoch", type = int, default = 128)
+    parser.add_argument("--num_epoch", type = int, default = 32)
     parser.add_argument("--seq_len_efit", type = int, default = 10)
     parser.add_argument("--seq_len_ece", type = int, default = 50)
     parser.add_argument("--seq_len_diag", type = int, default = 50)
@@ -370,7 +370,7 @@ if __name__ == "__main__":
     
     # define model
     model_argument = {
-        
+        # EFIT channels
         "efit-hidden_dim":tune.choice([32, 64, 128, 256]),
         "efit-channels":tune.choice([32, 64, 128, 256]),
         "efit-kernel_size":tune.choice([2,3,4]),
@@ -379,6 +379,7 @@ if __name__ == "__main__":
         "efit-nlevel":tune.choice([2,3,4,5]),
         "efit-nrecept":tune.choice([1024, 1024 * 8, 1024 * 16]),
 
+        # ECE channels
         "ece-hidden_dim":tune.choice([32, 64, 128, 256]),
         "ece-channels":tune.choice([32, 64, 128, 256]),
         "ece-kernel_size":tune.choice([2,3,4]),
@@ -387,6 +388,7 @@ if __name__ == "__main__":
         "ece-nlevel":tune.choice([2,3,4,5]),
         "ece-nrecept":tune.choice([1024, 1024 * 8, 1024 * 16]),
 
+        # Diag channels
         "diag-hidden_dim":tune.choice([32, 64, 128, 256]),
         "diag-channels":tune.choice([32, 64, 128, 256]),
         "diag-kernel_size":tune.choice([2,3,4]),
@@ -395,6 +397,7 @@ if __name__ == "__main__":
         "diag-nlevel":tune.choice([2,3,4,5]),
         "diag-nrecept":tune.choice([1024, 1024 * 8, 1024 * 16]),
        
+        # Classifier
         "cls-cls_dim" : tune.choice([32, 64, 128, 256]),
         "cls-prior_pi":tune.loguniform(0.2, 0.5),
         "cls-prior_sigma1":tune.loguniform(0.5, 5.0),
@@ -439,7 +442,6 @@ if __name__ == "__main__":
         
     best_trial = tune_result.get_best_trial("f1_score", "max", "last")
     print("Best trial final validation f1 score : {:.3f}".format(best_trial.last_result["f1_score"]))
-    
     print("Best trial config: {}".format(best_trial.config))
     
     best_model = load_model(best_trial.config, device)
@@ -459,4 +461,18 @@ if __name__ == "__main__":
     )
     
     print("Best trial test f1-score:{:.3f}".format(test_f1))
+    
+    with open("./results/hpo_{}.txt".format(tag), 'w') as f:
+        header = "="*20 +  "Hyperparameter optimization" + "="*20
+        f.write(header)
+        f.write("\ntag : {}".format(tag))
+        
+        best_config = best_trial.config
+        
+        for key in best_config.keys():
+            f.write("\n{}:{}".format(key, best_config[key]))
+            
+        summary = "\nBest trial test f1-score:{:.3f}".format(test_f1)
+        f.write(summary)
+        
     ray.shutdown()

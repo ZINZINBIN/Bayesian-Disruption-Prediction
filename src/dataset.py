@@ -137,7 +137,7 @@ class MultiSignalDataset(Dataset):
                     t_diff = t_ece - t_efit
                     idx_efit += int(round(t_diff / self.dt / 5, 1))
                 
-                if t_ece >= tftsrt and t_ece < t_disrupt - self.dt * (1.5 * self.seq_len_ece + self.dist):
+                if t_ece >= tftsrt and t_ece < t_disrupt - self.dt * (2.0 * self.seq_len_ece + self.dist):
                     indx_ece = df_ece_shot.index.values[idx_ece]
                     indx_efit = df_efit_shot.index.values[idx_efit]
                     indx_diag = df_diag_shot.index.values[idx_diag]
@@ -148,7 +148,7 @@ class MultiSignalDataset(Dataset):
                     idx_ece += self.seq_len_ece // 5
                     idx_diag += self.seq_len_diag // 5
                 
-                elif t_ece >=  t_disrupt - self.dt * (1.5 * self.seq_len_ece + self.dist) and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist):
+                elif t_ece >=  t_disrupt - self.dt * (2.0 * self.seq_len_ece + self.dist) and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist):
                     indx_ece = df_ece_shot.index.values[idx_ece]
                     indx_efit = df_efit_shot.index.values[idx_efit]
                     indx_diag = df_diag_shot.index.values[idx_diag]
@@ -158,6 +158,9 @@ class MultiSignalDataset(Dataset):
                     
                     idx_ece += self.seq_len_ece // 10
                     idx_diag += self.seq_len_diag // 10
+                    
+                    # idx_ece += self.seq_len_ece // 25
+                    # idx_diag += self.seq_len_diag // 25
                 
                 elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= t_disrupt - self.dt * self.seq_len_ece + 2 * self.dt:
                     indx_ece = df_ece_shot.index.values[idx_ece]

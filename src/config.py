@@ -14,10 +14,12 @@ class Config():
       }
       
       # EFIT
-      EFIT = ['\\q0', '\\q95', '\\ipmhd', '\\kappa', '\\tritop','\\tribot', '\\betap', '\\betan', '\\li', '\\bcentr', '\\rsurf', '\\aminor',]
+      # EFIT = ['\\q0', '\\q95', '\\ipmhd', '\\kappa', '\\tritop','\\tribot', '\\betap', '\\betan', '\\li', '\\bcentr', '\\rsurf', '\\aminor',]
+      EFIT = ['\\q0', '\\q95', '\\qmin', '\\ipmhd', '\\kappa', '\\tritop','\\tribot', '\\betap', '\\betan', '\\li', '\\bcentr', '\\rsurf', '\\aminor','\\drsep', '\\rxpt1', '\\zxpt1', '\\rxpt2', '\\zxpt2']
       
       # Feature engineering
-      EFIT_FE = ['\\nG'] # ['\\nG', '\\nG_tci01', '\\nG_tci02', '\\nG_tci03', '\\nG_tci04', '\\nG_tci05']
+      # EFIT_FE = ['\\nG'] # ['\\nG', '\\nG_tci01', '\\nG_tci02', '\\nG_tci03', '\\nG_tci04', '\\nG_tci05']
+      EFIT_FE = ['\\nG', '\\troyon']
       
       # ECE
       ECE = ['\\ECE08', '\\ECE13', '\\ECE18', '\\ECE24', '\\ECE26','\\ECE32', '\\ECE37', '\\ECE42', '\\ECE54', '\\ECE63', '\\ECE67', '\\ECE73']
@@ -92,28 +94,28 @@ class Config():
       optim_header_config = {
             "efit":{
                   "num_inputs":len(EFIT + EFIT_FE),
-                  "hidden_dim":128,
-                  "num_channels":[128] * 4,
+                  "hidden_dim":64,
+                  "num_channels":[64] * 4,
                   "kernel_size":2,
-                  "dropout":0.15,
-                  "dilation_size":calc_dilation(2, 3, 4, 1024),
+                  "dropout":0.1,
+                  "dilation_size":calc_dilation(2, 3, 4, 1024 * 8),
                   "seq_len":10
             },
             "ece":{
                   "num_inputs":len(ECE),
-                  "hidden_dim":128,
+                  "hidden_dim":64,
                   "num_channels":[128] * 4,
                   "kernel_size":2,
-                  "dropout":0.025,
-                  "dilation_size":calc_dilation(2, 3, 4, 1024),
+                  "dropout":0.1,
+                  "dilation_size":calc_dilation(2, 3, 4, 1024 * 8),
                   "seq_len":50
             },
             "diag":{
                   "num_inputs":len(DIAG),
-                  "hidden_dim":128,
+                  "hidden_dim":64,
                   "num_channels":[128]*4,
                   "kernel_size":2,
-                  "dropout":0.25,
+                  "dropout":0.1,
                   "dilation_size":calc_dilation(2, 3, 4, 1024 * 8),
                   "seq_len":50
             }
@@ -122,8 +124,8 @@ class Config():
       optim_classifier_config = {
             "cls_dim" : 256,
             "n_classes":2,
-            "prior_pi":0.368,
-            "prior_sigma1":1.25,
+            "prior_pi":0.5,
+            "prior_sigma1":1.0,
             "prior_sigma2":0.0025,
       }
       
