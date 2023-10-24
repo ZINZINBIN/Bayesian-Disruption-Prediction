@@ -6,13 +6,11 @@ import argparse
 from src.dataset import MultiSignalDataset
 from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
-from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything, generate_3D_feature_importance, generate_bayes_prob_curve
+from src.utils.utility import preparing_0D_dataset, generate_model_performance, seed_everything
 from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_2D_decision_boundary
 from src.evaluate import evaluate, evaluate_detail
 from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
 from src.models.predictor import BayesianPredictor
-from src.feature_importance import compute_permute_feature_importance
-from src.models.BNN import compute_ensemble_probability, compute_uncertainty_per_data
 from src.config import Config
 
 config = Config()
@@ -111,18 +109,6 @@ if __name__ == "__main__":
     # seed initialize
     seed_everything(args['random_seed'], False)
     
-    # save directory
-    save_dir = args['save_dir']
-    
-    if not os.path.isdir(save_dir):
-        os.mkdir(save_dir)
-        
-    if not os.path.isdir("./weights"):
-        os.mkdir("./weights")
-        
-    if not os.path.isdir("./runs"):
-        os.mkdir("./runs")
-    
     # tag : {model_name}_clip_{seq_len}_dist_{pred_len}_{Loss-type}_{Boosting-type}
     loss_type = args['loss_type']
     
@@ -145,6 +131,18 @@ if __name__ == "__main__":
     
     tag = "Bayes_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
     
+    # save directory
+    save_dir = os.path.join(args['save_dir'], tag)
+    
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        
+    if not os.path.isdir("./weights"):
+        os.mkdir("./weights")
+        
+    if not os.path.isdir("./runs"):
+        os.mkdir("./runs")
+        
     print("================= Running code =================")
     print("Setting : {}".format(tag))
     
@@ -239,7 +237,6 @@ if __name__ == "__main__":
     print("\n====================== evaluation process ======================\n")
     model.load_state_dict(torch.load(save_best_dir))
     
-    '''
     print("\nEvaluation:train-dataset\n")
     test_loss, test_acc, test_f1 = evaluate(
         train_loader,
@@ -247,8 +244,8 @@ if __name__ == "__main__":
         optimizer,
         loss_fn,
         device,
-        save_conf = os.path.join(save_dir, "{}_train_confusion.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_train_eval.txt".format(tag)),
+        save_conf = os.path.join(save_dir, "train_confusion.png"),
+        save_txt = os.path.join(save_dir, "train_eval.txt"),
         use_uncertainty=False
     )
     
@@ -259,8 +256,8 @@ if __name__ == "__main__":
         optimizer,
         loss_fn,
         device,
-        save_conf = os.path.join(save_dir, "{}_valid_confusion.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_valid_eval.txt".format(tag)),
+        save_conf = os.path.join(save_dir, "valid_confusion.png"),
+        save_txt = os.path.join(save_dir, "valid_eval.txt"),
         use_uncertainty=False
     )
     
@@ -271,8 +268,8 @@ if __name__ == "__main__":
         optimizer,
         loss_fn,
         device,
-        save_conf = os.path.join(save_dir, "{}_test_confusion_use_uncertainty.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_test_eval_use_uncertainty.txt".format(tag)),
+        save_conf = os.path.join(save_dir, "test_confusion_use_uncertainty.png"),
+        save_txt = os.path.join(save_dir, "test_eval_use_uncertainty.txt"),
         use_uncertainty=True
     )
     
@@ -283,7 +280,7 @@ if __name__ == "__main__":
         test_loader,
         model,
         device,
-        save_csv = os.path.join(save_dir, "{}_eval_detail.csv".format(tag)),
+        save_csv = os.path.join(save_dir, "eval_detail.csv"),
         tag = tag
     )
     
@@ -297,43 +294,43 @@ if __name__ == "__main__":
             model, 
             train_loader,
             device,
-            os.path.join(save_dir, "{}_2D_latent_train.png".format(tag))
+            os.path.join(save_dir, "latent_2D_train.png")
         )
         
         visualize_2D_latent_space(
             model, 
             test_loader,
             device,
-            os.path.join(save_dir, "{}_2D_latent_test.png".format(tag))
+            os.path.join(save_dir, "latent_2D_test.png")
         )
         
         visualize_2D_decision_boundary(
             model, 
             train_loader,
             device,
-            os.path.join(save_dir, "{}_2D_decision_boundary_train.png".format(tag))
+            os.path.join(save_dir, "decision_boundary_2D_train.png")
         )
         
         visualize_2D_decision_boundary(
             model, 
             test_loader,
             device,
-            os.path.join(save_dir, "{}_2D_decision_boundary_test.png".format(tag))
+            os.path.join(save_dir, "decision_boundary_2D_test.png")
         )
             
     except:
         print("{} : visualize 2D latent space doesn't work due to stability error".format(tag))
-    '''
+    
     
     # plot probability curve
     test_shot_num = args['test_shot_num']
     print("\n====================== Probability curve generation process ======================\n")
     
-    generate_bayes_prob_curve(
+    generate_model_performance(
         filepath = config.filepath,
         model = model, 
         device = device,
-        save_dir = os.path.join(save_dir, "{}_bayes_probs_curve_{}.png".format(tag, test_shot_num)),
+        save_dir = save_dir,
         shot_num = test_shot_num,
         seq_len_efit = args['seq_len_efit'], 
         seq_len_ece = args['seq_len_ece'],
@@ -341,20 +338,8 @@ if __name__ == "__main__":
         dist = args['dist'],
         dt = 0.01,
         mode = args['mode'], 
-        scaler_type = args['scaler']
-    )
-    
-    generate_3D_feature_importance(
-        filepath = config.filepath,
-        model = model, 
-        device = device,
-        save_dir = os.path.join(save_dir, "{}_feature_importance_3D_{}.png".format(tag, test_shot_num)),
-        shot_num = test_shot_num,
-        seq_len_efit = args['seq_len_efit'], 
-        seq_len_ece = args['seq_len_ece'],
-        seq_len_diag = args['seq_len_diag'], 
-        dist = args['dist'],
-        dt = 0.01,
-        mode = args['mode'], 
-        scaler_type = args['scaler']
+        scaler_type = args['scaler'],
+        is_plot_shot_info=True,
+        is_plot_uncertainty=False,
+        is_plot_feature_importance=True
     )

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import math
-import torch
+from typing import Literal
 
 def compute_tau_e(df:pd.DataFrame):
     
@@ -44,3 +44,26 @@ def compute_GreenWald_density(df : pd.DataFrame):
       
 def compute_Troyon_beta(df : pd.DataFrame):
     df['\\troyon'] = df['\\betan'] * df['\\ipmhd'].abs() / df['\\aminor'] / df['\\bcentr'] 
+
+def moving_avarage_smoothing(X:np.array,k:int, method:Literal['backward', 'center'] = 'backward'):
+    S = np.zeros(X.shape[0])
+    
+    if method == 'backward':
+        for t in range(X.shape[0]):
+            if t < k:
+                S[t] = np.mean(X[:t+1])
+            else:
+                S[t] = np.sum(X[t-k:t])/k
+    else:
+        hw = k//2
+        for t in range(X.shape[0]):
+            if t < hw:
+                S[t] = np.mean(X[:t+1])
+            elif t  < X.shape[0] - hw:
+                S[t] = np.mean(X[t-hw:t+hw])
+            else:
+                S[t] = np.mean(X[t-hw:])
+    
+    S = np.clip(S, 0, 1)
+    
+    return S

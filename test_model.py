@@ -6,12 +6,11 @@ import argparse
 from src.dataset import MultiSignalDataset
 from torch.utils.data import DataLoader, RandomSampler
 from src.utils.sampler import ImbalancedDatasetSampler
-from src.utils.utility import preparing_0D_dataset, plot_learning_curve, generate_prob_curve_from_0D, seed_everything
+from src.utils.utility import preparing_0D_dataset, generate_model_performance, seed_everything
 from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_2D_decision_boundary
 from src.evaluate import evaluate, evaluate_detail
 from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
 from src.models.predictor import Predictor
-from src.feature_importance import compute_permute_feature_importance
 from src.config import Config
 
 config = Config()
@@ -110,18 +109,6 @@ if __name__ == "__main__":
     # seed initialize
     seed_everything(args['random_seed'], False)
     
-    # save directory
-    save_dir = args['save_dir']
-    
-    if not os.path.isdir(save_dir):
-        os.mkdir(save_dir)
-        
-    if not os.path.isdir("./weights"):
-        os.mkdir("./weights")
-        
-    if not os.path.isdir("./runs"):
-        os.mkdir("./runs")
-    
     # tag : {model_name}_clip_{seq_len}_dist_{pred_len}_{Loss-type}_{Boosting-type}
     loss_type = args['loss_type']
     
@@ -143,6 +130,18 @@ if __name__ == "__main__":
         scale_type = args['scaler']
     
     tag = "{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
+    
+    # save directory
+    save_dir = os.path.join(args['save_dir'], tag)
+    
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        
+    if not os.path.isdir("./weights"):
+        os.mkdir("./weights")
+        
+    if not os.path.isdir("./runs"):
+        os.mkdir("./runs")
     
     print("================= Running code =================")
     print("Setting : {}".format(tag))
@@ -233,7 +232,7 @@ if __name__ == "__main__":
         
     if args['use_label_smoothing']:
         loss_fn = LabelSmoothingLoss(loss_fn, alpha = args['smoothing'], kl_weight = args['kl_weight'], classes = 2)
-    
+        
     # evaluation process
     print("\n====================== evaluation process ======================\n")
     model.load_state_dict(torch.load(save_best_dir))
@@ -245,8 +244,8 @@ if __name__ == "__main__":
         optimizer,
         loss_fn,
         device,
-        save_conf = os.path.join(save_dir, "{}_train_confusion.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_train_eval.txt".format(tag))
+        save_conf = os.path.join(save_dir, "train_confusion.png"),
+        save_txt = os.path.join(save_dir, "train_eval.txt")
     )
     
     print("\nEvaluation:valid-dataset\n")
@@ -256,8 +255,8 @@ if __name__ == "__main__":
         optimizer,
         loss_fn,
         device,
-        save_conf = os.path.join(save_dir, "{}_valid_confusion.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_valid_eval.txt".format(tag))
+        save_conf = os.path.join(save_dir, "valid_confusion.png"),
+        save_txt = os.path.join(save_dir, "valid_eval.txt")
     )
     
     print("\nEvaluation:test-dataset\n")
@@ -267,8 +266,8 @@ if __name__ == "__main__":
         optimizer,
         loss_fn,
         device,
-        save_conf = os.path.join(save_dir, "{}_test_confusion.png".format(tag)),
-        save_txt = os.path.join(save_dir, "{}_test_eval.txt".format(tag))
+        save_conf = os.path.join(save_dir, "test_confusion.png"),
+        save_txt = os.path.join(save_dir, "test_eval.txt")
     )
     
     print("\nEvaluation per shot\n")
@@ -278,7 +277,7 @@ if __name__ == "__main__":
         test_loader,
         model,
         device,
-        save_csv = os.path.join(save_dir, "{}_eval_detail.csv".format(tag)),
+        save_csv = os.path.join(save_dir, "eval_detail.csv"),
         tag = tag
     )
     
@@ -322,11 +321,11 @@ if __name__ == "__main__":
     # plot probability curve
     test_shot_num = args['test_shot_num']
     print("\n====================== Probability curve generation process ======================\n")
-    generate_prob_curve_from_0D(
+    generate_model_performance(
         filepath = config.filepath,
         model = model, 
         device = device,
-        save_dir = os.path.join(save_dir, "{}_probs_curve_{}.png".format(tag, test_shot_num)),
+        save_dir = save_dir,
         shot_num = test_shot_num,
         seq_len_efit = args['seq_len_efit'], 
         seq_len_ece = args['seq_len_ece'],
@@ -334,5 +333,8 @@ if __name__ == "__main__":
         dist = args['dist'],
         dt = 0.01,
         mode = args['mode'], 
-        scaler_type = args['scaler']
+        scaler_type = args['scaler'],
+        is_plot_shot_info=True,
+        is_plot_uncertainty=False,
+        is_plot_feature_importance=True
     )

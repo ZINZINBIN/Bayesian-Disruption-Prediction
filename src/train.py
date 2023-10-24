@@ -10,7 +10,7 @@ from sklearn.metrics import f1_score
 from src.evaluate import evaluate_tensorboard
 from src.utils.EarlyStopping import EarlyStopping
 from torch.utils.tensorboard import SummaryWriter
-from src.utils.utility import generate_prob_curve_from_0D
+from src.utils.utility import generate_model_performance
 from src.config import Config
 
 config = Config()
@@ -227,7 +227,7 @@ def train(
                     writer.add_figure('Model-performance', fig, epoch)
                     
                     # Checking the performance for continuous disruption prediciton 
-                    fig, _, _ = generate_prob_curve_from_0D(
+                    _, _, fig_dis, _, fig_fi, _ = generate_model_performance(
                         filepath = config.filepath,
                         model = model, 
                         device = device,
@@ -239,11 +239,15 @@ def train(
                         dist = test_for_check_per_epoch.dataset.dist,
                         dt = 0.01,
                         mode = test_for_check_per_epoch.dataset.mode,
-                        scaler_type=scaler_type
+                        scaler_type=scaler_type,
+                        is_plot_shot_info=False,
+                        is_plot_uncertainty=False,
+                        is_plot_feature_importance=True
                     )
                     
                     model.train()
-                    writer.add_figure('Continuous disruption prediction', fig, epoch)
+                    writer.add_figure('Continuous disruption prediction', fig_dis, epoch)
+                    writer.add_figure('Feature importance', fig_fi, epoch)
                     
         # save the last parameters
         torch.save(model.state_dict(), save_last_dir)
