@@ -7,6 +7,9 @@
 # npz file
 *.npz
 
+# pickle
+*.pkl
+
 # runs folder
 runs/*
 
