@@ -41,6 +41,7 @@ def parsing():
     parser.add_argument("--seq_len_ece", type = int, default = 50)
     parser.add_argument("--seq_len_diag", type = int, default = 50)
     parser.add_argument("--dist", type = int, default = 4)
+    parser.add_argument("--dt", type = float, default = 0.01)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
     
@@ -173,7 +174,7 @@ if __name__ == "__main__":
         test_list[key] = buffer
     
     print("================= Dataset information =================")
-    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test')
+    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test')
     test_data.get_shot_num = True
     
     # define model

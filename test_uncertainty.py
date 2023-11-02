@@ -39,6 +39,7 @@ def parsing():
     parser.add_argument("--seq_len_ece", type = int, default = 50)
     parser.add_argument("--seq_len_diag", type = int, default = 50)
     parser.add_argument("--dist", type = int, default = 4)
+    parser.add_argument("--dt", type = float, default = 0.01)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
     
@@ -157,7 +158,7 @@ if __name__ == "__main__":
     train_list, valid_list, test_list, scaler_list = preparing_0D_dataset(config.filepath, None, args['scaler'], args['test_shot_num'])
     
     print("================= Dataset information =================")
-    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test')
+    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test')
     test_data.get_shot_num = True
     
     # define model
@@ -336,7 +337,7 @@ if __name__ == "__main__":
     
     '''
     # uncertainty computation for training dataset
-    train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train')
+    train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train')
     train_data.get_shot_num = True
     train_sampler = RandomSampler(train_data)
     train_loader = DataLoader(train_data, batch_size = 1, sampler=train_sampler, num_workers = 1, pin_memory=args["pin_memory"])
