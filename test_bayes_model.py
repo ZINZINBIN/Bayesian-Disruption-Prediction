@@ -340,6 +340,6 @@ if __name__ == "__main__":
         mode = args['mode'], 
         scaler_type = args['scaler'],
         is_plot_shot_info=True,
-        is_plot_uncertainty=False,
+        is_plot_uncertainty=True,
         is_plot_feature_importance=True
     )

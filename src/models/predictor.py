@@ -4,6 +4,7 @@ import numpy as np
 from typing import Dict, Literal, Optional
 from src.models.BNN import BayesLinear, variational_approximator
 from src.models.tcn import TCN, calc_seq_length
+from src.models.NoiseLayer import NoiseLayer
 from pytorch_model_summary import summary
 
 class Predictor(nn.Module):
@@ -14,6 +15,7 @@ class Predictor(nn.Module):
             [key, self.create_base_model(header_config[key])] for key in header_config.keys()
         ])
         
+        self.noise = NoiseLayer(mean = 0, std = 1.0)
         self.classifier_config = classifier_config
         self.device = device
           
@@ -49,7 +51,8 @@ class Predictor(nn.Module):
 
         for key in self.header_config.keys():
             signal = data[key]
-            signal_enc = self.header_list[key](signal.to(self.device))
+            signal = self.noise(signal.to(self.device))
+            signal_enc = self.header_list[key](signal)
             x.append(signal_enc)
             
         x = torch.cat(x, 1)
@@ -88,6 +91,8 @@ class BayesianPredictor(nn.Module):
             [key, self.create_base_model(header_config[key])] for key in header_config.keys()
         ])
         
+        self.noise = NoiseLayer(mean = 0, std = 1.0)
+        
         self.classifier_config = classifier_config
         self.device = device
           
@@ -123,7 +128,8 @@ class BayesianPredictor(nn.Module):
         
         for key in self.header_config.keys():
             signal = data[key]
-            signal_enc = self.header_list[key](signal.to(self.device))
+            signal = self.noise(signal.to(self.device))
+            signal_enc = self.header_list[key](signal)
             x.append(signal_enc)
             
         x = torch.cat(x, 1)

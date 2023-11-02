@@ -7,22 +7,34 @@ class Config():
       
       # filepath list
       filepath = {
-            "efit":"./dataset/Bayesian_Disruption_efit.csv",
-            "ece":"./dataset/Bayesian_Disruption_ece.csv",
-            "diag":"./dataset/Bayesian_Disruption_diag.csv",
+            "efit":"./dataset/Bayesian_Disruption_efit.pkl",
+            "ece":"./dataset/Bayesian_Disruption_ece.pkl",
+            "diag":"./dataset/Bayesian_Disruption_diag.pkl",
             "disrupt":'./dataset/Bayesian_Disruption_Shot_List.csv'
       }
       
       # EFIT
       # EFIT = ['\\q0', '\\q95', '\\ipmhd', '\\kappa', '\\tritop','\\tribot', '\\betap', '\\betan', '\\li', '\\bcentr', '\\rsurf', '\\aminor',]
-      EFIT = ['\\q0', '\\q95', '\\qmin', '\\ipmhd', '\\kappa', '\\tritop','\\tribot', '\\betap', '\\betan', '\\li', '\\bcentr', '\\rsurf', '\\aminor','\\drsep', '\\rxpt1', '\\zxpt1', '\\rxpt2', '\\zxpt2']
+      EFIT = ['\\q95', '\\qmin', '\\ipmhd', '\\kappa', '\\tritop','\\tribot', '\\betap', '\\betan', '\\li', '\\bcentr', '\\rsurf', '\\aminor','\\drsep', '\\rxpt1', '\\zxpt1', '\\rxpt2', '\\zxpt2']
       
       # Feature engineering
       # EFIT_FE = ['\\nG'] # ['\\nG', '\\nG_tci01', '\\nG_tci02', '\\nG_tci03', '\\nG_tci04', '\\nG_tci05']
       EFIT_FE = ['\\nG', '\\troyon']
       
       # ECE
-      ECE = ['\\ECE08', '\\ECE13', '\\ECE18', '\\ECE24', '\\ECE26','\\ECE32', '\\ECE37', '\\ECE42', '\\ECE54', '\\ECE63', '\\ECE67', '\\ECE73']
+      # ECE = ['\\ECE08', '\\ECE13', '\\ECE18', '\\ECE24', '\\ECE26','\\ECE32', '\\ECE37', '\\ECE42', '\\ECE54', '\\ECE63', '\\ECE67', '\\ECE73']
+      ECE = [
+            '\\ECE04','\\ECE05','\\ECE06','\\ECE07','\\ECE08', 
+            '\\ECE09', '\\ECE10', '\\ECE11', '\\ECE12', '\\ECE13', '\\ECE14', '\\ECE15',
+            '\\ECE16', '\\ECE17', '\\ECE18', '\\ECE19', '\\ECE20', '\\ECE21', '\\ECE22',
+            '\\ECE23', '\\ECE24', '\\ECE25', '\\ECE26', '\\ECE27', '\\ECE29', '\\ECE30',
+            '\\ECE31', '\\ECE32', '\\ECE33', '\\ECE34', '\\ECE35', '\\ECE36', '\\ECE37',
+            '\\ECE38', '\\ECE39', '\\ECE40', '\\ECE41', '\\ECE42', '\\ECE43', '\\ECE44',
+            '\\ECE45', '\\ECE46', '\\ECE47', '\\ECE50', '\\ECE51', '\\ECE53', '\\ECE54',
+            '\\ECE55', '\\ECE56', '\\ECE57', '\\ECE58', '\\ECE60', '\\ECE61', '\\ECE62',
+            '\\ECE63', '\\ECE64', '\\ECE65', '\\ECE66', '\\ECE67', '\\ECE68', '\\ECE69',
+            '\\ECE70', '\\ECE71', '\\ECE72', '\\ECE73', '\\ECE74', '\\ECE75', '\\ECE76'
+            ]
       
       # Dianostics
       LM = ['\\LM01','\\LM02','\\LM03','\\LM04']                                                                  # lock mode
@@ -39,11 +51,12 @@ class Config():
             '\\TOR_HA09','\\TOR_HA10','\\TOR_HA11','\\TOR_HA12','\\TOR_HA13','\\TOR_HA14','\\TOR_HA15','\\TOR_HA16','\\TOR_HA17',
             '\\TOR_HA18','\\TOR_HA19','\\TOR_HA20','\\POL_HA01','\\POL_HA02','\\POL_HA03','\\POL_HA04','\\POL_HA05',
             '\\POL_HA06','\\POL_HA07','\\POL_HA08','\\POL_HA09','\\POL_HA10']                                     # H-alpha signal
-      ECH = ['\\EC2_PWR','\\EC3_PWR', '\\EC4_PWR']                                                                # EC heating 
+      MP = ['\\MP4P43Z','\\MP4P44Z','\\MP4P45Z','\\MP4P50Z','\\MP4P51Z','\\MP4P52Z','\\PLMP01Z','\\PLMP02Z','\\PLMP03Z','\\PLMP04Z'] # Magnetic Probe
+      ECH = ['\\EC1_PWR','\\EC2_PWR','\\EC3_PWR','\\EC4_PWR','\\EC5_PWR']                                         # EC heating 
       NBH = ['\\nb11_pnb','\\nb12_pnb','\\nb13_pnb']                                                              # NB heating
       BOL = ['\\ax3_bolo02:FOO']
       
-      DIAG = LM + DL + HCM + TCI + LV + RC + HA + ECH + NBH + BOL
+      DIAG = LM + DL + HCM + TCI + LV + RC + HA + MP + ECH + NBH + BOL
       
       COLUMN_NAME_SCALER = {
             "efit":EFIT + EFIT_FE,
@@ -56,29 +69,29 @@ class Config():
             "efit":{
                   "num_inputs":len(EFIT + EFIT_FE),
                   "hidden_dim":64,
-                  "num_channels":[64] * 4,
-                  "kernel_size":2,
+                  "num_channels":[64] * 5,
+                  "kernel_size":3,
                   "dropout":0.1,
-                  "dilation_size":calc_dilation(2, 2, 4, 1024),
-                  "seq_len":10
+                  "dilation_size":calc_dilation(3, 2, 5, 1024),
+                  "seq_len":10 * 5
             },
             "ece":{
                   "num_inputs":len(ECE),
                   "hidden_dim":64,
-                  "num_channels":[64] * 4,
-                  "kernel_size":2,
+                  "num_channels":[64] * 5,
+                  "kernel_size":4,
                   "dropout":0.1,
-                  "dilation_size":calc_dilation(2, 2, 4, 1024),
-                  "seq_len":50
+                  "dilation_size":calc_dilation(4, 2, 5, 1024 * 8),
+                  "seq_len":50 * 10
             },
             "diag":{
                   "num_inputs":len(DIAG),
                   "hidden_dim":64,
-                  "num_channels":[64]*4,
-                  "kernel_size":2,
+                  "num_channels":[64] * 5,
+                  "kernel_size":4,
                   "dropout":0.1,
-                  "dilation_size":calc_dilation(2, 2, 4, 1024),
-                  "seq_len":50
+                  "dilation_size":calc_dilation(4, 2, 5, 1024 * 8),
+                  "seq_len":50 * 10
             }
       }
       

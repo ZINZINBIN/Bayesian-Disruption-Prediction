@@ -34,7 +34,7 @@ def parsing():
     parser.add_argument("--gpu_num", type = int, default = 0)
     
     # mode : predicting thermal quench vs current quench
-    parser.add_argument("--mode", type = str, default = 'CQ', choices=['TQ','CQ'])
+    parser.add_argument("--mode", type = str, default = 'TQ', choices=['TQ','CQ'])
 
     # batch size / sequence length / epochs / distance / num workers / pin memory use
     parser.add_argument("--batch_size", type = int, default = 100)
@@ -43,6 +43,7 @@ def parsing():
     parser.add_argument("--seq_len_ece", type = int, default = 50)
     parser.add_argument("--seq_len_diag", type = int, default = 50)
     parser.add_argument("--dist", type = int, default = 4)
+    parser.add_argument("--dt", type = float, default = 0.01)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
     
@@ -161,9 +162,9 @@ if __name__ == "__main__":
     train_list, valid_list, test_list, scaler_list = preparing_0D_dataset(config.filepath, None, args['scaler'], args['test_shot_num'])
     
     print("================= Dataset information =================")
-    train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train')
-    valid_data = MultiSignalDataset(valid_list['disrupt'], valid_list['efit'], valid_list['ece'], valid_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'valid')
-    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test')
+    train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train')
+    valid_data = MultiSignalDataset(valid_list['disrupt'], valid_list['efit'], valid_list['ece'], valid_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'valid')
+    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test')
 
     # label distribution for LDAM / Focal Loss
     train_data.get_num_per_cls()
@@ -255,7 +256,8 @@ if __name__ == "__main__":
         early_stopping_verbose = args['early_stopping_verbose'],
         early_stopping_patience = args['early_stopping_patience'],
         early_stopping_delta = args['early_stopping_delta'],
-        scaler_type = args['scaler']
+        scaler_type = args['scaler'],
+        dt = args['dt']
     )
     
     # plot the learning curve
@@ -330,7 +332,7 @@ if __name__ == "__main__":
         seq_len_ece = args['seq_len_ece'],
         seq_len_diag = args['seq_len_diag'], 
         dist = args['dist'],
-        dt = 0.01,
+        dt = args['dt'],
         mode = args['mode'], 
         scaler_type = args['scaler'],
         is_plot_shot_info=True,

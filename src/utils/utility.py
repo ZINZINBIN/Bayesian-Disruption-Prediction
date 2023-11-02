@@ -69,9 +69,9 @@ def preparing_0D_dataset(
     ):
     
     data_disrupt = pd.read_csv(filepath['disrupt'], encoding = "euc-kr")
-    data_efit = pd.read_csv(filepath['efit'])
-    data_ece = pd.read_csv(filepath['ece'])
-    data_diag = pd.read_csv(filepath['diag'])
+    data_efit = pd.read_csv(filepath['efit']) if filepath['efit'].split(".")[-1] == "csv" else pd.read_pickle(filepath['efit'])
+    data_ece = pd.read_csv(filepath['ece']) if filepath['ece'].split(".")[-1] == "csv" else pd.read_pickle(filepath['ece'])
+    data_diag = pd.read_csv(filepath['diag']) if filepath['diag'].split(".")[-1] == "csv" else pd.read_pickle(filepath['diag'])
     
     # train / valid / test data split
     ori_shot_list = np.unique(data_disrupt.shot.values)
@@ -220,18 +220,25 @@ class MultiSignalDataset(Dataset):
         
         t_max = self.data_ece['time'].values[-1]
         
+        if self.dt == 0.01:
+            dt_efit_ece = 0.045
+            ratio = 5
+        else:
+            dt_efit_ece = 0.009
+            ratio = 10
+        
         while(idx_ece < idx_ece_last and idx_diag < idx_diag_last and idx_efit < idx_efit_last):
                 
             t_efit = self.data_efit.iloc[idx_efit]['time']
             t_ece = self.data_ece.iloc[idx_ece]['time']
             t_diag = self.data_diag.iloc[idx_diag]['time']
             
-            assert abs(t_diag - t_ece) <= 0.02, "Dignostic data and ECE data are not consistent"
-                
+            assert abs(t_diag - t_ece) <= 2 * self.dt, "Dignostic data and ECE data are not consistent"
+            
             # synchronize t_efit and t_ece
-            if t_efit <= t_ece - 0.05:
+            if t_efit <= t_ece - dt_efit_ece:
                 t_diff = t_ece - t_efit
-                idx_efit += int(round(t_diff / self.dt / 5, 1))
+                idx_efit += int(round(t_diff / self.dt / ratio, 1))
                 
             if t_ece >= tftsrt and t_ece <= t_max - self.dt * (self.seq_len_ece + self.dist) * 1.25:
                 indx_ece = self.data_ece.index.values[idx_ece]
@@ -240,19 +247,36 @@ class MultiSignalDataset(Dataset):
                 
                 self.time_slice.append(t_ece + self.seq_len_ece * self.dt)
                 self.indices.append((indx_efit, indx_ece, indx_diag))
-                idx_ece += 1
-                idx_diag += 1
+                
+                if self.dt == 0.01:
+                    idx_ece += 1
+                    idx_diag += 1
+                        
+                elif self.dt == 0.001:
+                    idx_ece += 5
+                    idx_diag += 5
             
-            elif t_ece < tftsrt:
-                idx_ece += 1
-                idx_diag += 1
+            elif t_ece < tftsrt:  
+                        
+                if self.dt == 0.01:
+                    idx_ece += 1
+                    idx_diag += 1
+                        
+                elif self.dt == 0.001:
+                    idx_ece += 5
+                    idx_diag += 5
                 
             elif t_ece > t_max - self.dt * (self.seq_len_ece + self.dist) * 1.25:
                 break
             
             else:
-                idx_ece += 1
-                idx_diag += 1
+                if self.dt == 0.01:
+                    idx_ece += 1
+                    idx_diag += 1
+                        
+                elif self.dt == 0.001:
+                    idx_ece += 5
+                    idx_diag += 5
                 
     def preprocessing(self):
         
@@ -294,10 +318,10 @@ def plot_shot_info(
         save_dir: Optional[str] = None,
     ):
     
-    data_disrupt = pd.read_csv(filepath['disrupt'], encoding = "euc-kr")
-    data_efit = pd.read_csv(filepath['efit'])
-    data_ece = pd.read_csv(filepath['ece'])
-    data_diag = pd.read_csv(filepath['diag'])
+    data_disrupt = pd.read_csv(filepath['disrupt'], encoding = "euc-kr")    
+    data_efit = pd.read_csv(filepath['efit']) if filepath['efit'].split(".")[-1] == "csv" else pd.read_pickle(filepath['efit'])
+    data_ece = pd.read_csv(filepath['ece']) if filepath['ece'].split(".")[-1] == "csv" else pd.read_pickle(filepath['ece'])
+    data_diag = pd.read_csv(filepath['diag']) if filepath['diag'].split(".")[-1] == "csv" else pd.read_pickle(filepath['diag'])
     
     tTQend = data_disrupt[data_disrupt.shot == shot_num].t_tmq.values[0]
     tftsrt = data_disrupt[data_disrupt.shot == shot_num].t_flattop_start.values[0]
@@ -550,7 +574,12 @@ def plot_disrupt_prob_causes(feature_dict : Dict, shot_num : int, dt : float, di
         ax.bar(list(feature_importance.keys()), hist, zs = t, zdir = 'y', alpha = 0.8, in_layout = True)
     
     ax.set_xticks([i for i in range(len(list(feature_importance.keys())))], labels = list(feature_importance.keys()), rotation = 90, fontsize = 8)
-    ax.set_yticks(ticks = feature_dict['time'], labels = ["{:02d} ms".format(int(i * dt * 1000)) for i in reversed(range(1, dist + 1))])
+    
+    if dt == 0.01:
+        ax.set_yticks(ticks = feature_dict['time'], labels = ["{:02d} ms".format(int(i * dt * 1000)) for i in reversed(range(1, dist + 1))])
+    elif dt == 0.001:
+        ax.set_yticks(ticks = feature_dict['time'], labels = ["{:02d} ms".format(int(t * 1000)) for t in reversed(feature_dict['time'])])
+        
     ax.set_zlabel('Feature importance')
     ax.set_ylabel('$t_{pred}$ before TQ (unit:ms)')
     ax.set_zlim([0,1])

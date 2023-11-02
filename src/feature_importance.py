@@ -249,6 +249,13 @@ def compute_relative_importance(inputs:Dict[str, torch.Tensor], model:nn.Module,
     idx_last += idx + 1 
     info_dict['LV'] = imp_lv
     
+    imp_mp = 0
+    for idx, col in enumerate(config.MP):
+        imp_mp += feat_imp[idx + idx_last] / len(config.MP)
+        
+    idx_last += idx + 1 
+    info_dict['MP'] = imp_mp
+    
     imp_rc = 0
     for idx, col in enumerate(config.RC):
         imp_rc += feat_imp[idx + idx_last] / len(config.RC)

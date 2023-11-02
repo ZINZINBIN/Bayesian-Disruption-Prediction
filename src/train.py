@@ -145,7 +145,8 @@ def train(
     early_stopping_verbose : bool = True,
     early_stopping_patience : int = 12,
     early_stopping_delta : float = 1e-3,
-    scaler_type = None
+    scaler_type = None,
+    dt : float = 0.01,
     ):
 
     train_loss_list = []
@@ -237,7 +238,7 @@ def train(
                         seq_len_ece = test_for_check_per_epoch.dataset.seq_len_ece,
                         seq_len_diag = test_for_check_per_epoch.dataset.seq_len_diag, 
                         dist = test_for_check_per_epoch.dataset.dist,
-                        dt = 0.01,
+                        dt = dt,
                         mode = test_for_check_per_epoch.dataset.mode,
                         scaler_type=scaler_type,
                         is_plot_shot_info=False,

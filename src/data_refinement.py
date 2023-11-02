@@ -18,12 +18,21 @@ if __name__ == "__main__":
     # configuration
     config = Config()
     
+    datatype = "pickle" # "pickle" or "csv"
+    
     # load data
-    df_disrupt = pd.read_csv('./dataset/KSTAR_Disruption_Shot_List_2022.csv', encoding = 'euc-kr')
-    df_ece = pd.read_csv("./dataset/KSTAR_Disruption_ts_data_ece.csv")
-    df_ts = pd.read_csv("./dataset/KSTAR_Disruption_ts_data_thomson.csv")
-    df_efit = pd.read_csv("./dataset/KSTAR_Disruption_ts_data_efit.csv")
-    df_diag = pd.read_csv("./dataset/KSTAR_Disruption_ts_data_diag.csv")
+    if datatype == "csv":
+        df_disrupt = pd.read_csv('./dataset/KSTAR_Disruption_Shot_List_2022.csv', encoding = 'euc-kr')
+        df_ece = pd.read_csv("./dataset/KSTAR_Disruption_ts_data_ece.csv")
+        df_ts = pd.read_csv("./dataset/KSTAR_Disruption_ts_data_thomson.csv")
+        df_efit = pd.read_csv("./dataset/KSTAR_Disruption_ts_data_efit.csv")
+        df_diag = pd.read_csv("./dataset/KSTAR_Disruption_ts_data_diag.csv")
+    else:
+        df_disrupt = pd.read_csv('./dataset/KSTAR_Disruption_Shot_List_2022.csv', encoding = 'euc-kr')
+        df_ece = pd.read_pickle("./dataset/KSTAR_Disruption_ts_data_ece.pkl")
+        df_ts = pd.read_csv("./dataset/KSTAR_Disruption_ts_data_thomson.csv")
+        df_efit = pd.read_pickle("./dataset/KSTAR_Disruption_ts_data_efit.pkl")
+        df_diag = pd.read_pickle("./dataset/KSTAR_Disruption_ts_data_diag.pkl")
     
     # columns
     cols_ece = df_ece.columns[df_ece.notna().any()].drop(['Unnamed: 0','shot','time']).tolist()
@@ -40,7 +49,7 @@ if __name__ == "__main__":
     shot_list = df_ece.shot.unique()
     
     # 1st step: diagnostic data -> ignored shot selection
-    feature_list = config.LM + config.DL + config.HCM + config.TCI + config.LV + config.RC + config.HA + config.BOL
+    feature_list = config.LM + config.DL + config.HCM + config.TCI + config.LV + config.RC + config.HA + config.BOL + config.MP
     
     for col in feature_list:
         shot_ignore.extend(df_diag[df_diag[col].isna()].shot.unique())
@@ -151,6 +160,9 @@ if __name__ == "__main__":
     
     df_diag[config.ECH] = df_diag[config.ECH].apply(lambda x : x / 1e3) # kJ / kV / keV
     
+    for col in config.MP:
+        df_diag[col] = df_diag[col].apply(lambda x : bound(x, 1e2))
+    
     # valid shot selection
     print('\n',"="*50)
     print("# process: valid shot selection")
@@ -260,9 +272,17 @@ if __name__ == "__main__":
     df_diag = df_diag[['shot','time'] + config.DIAG]
     df_ts = df_ts[['shot','time'] + config.TS_TE + config.TS_NE]
     
-    df_disrupt.to_csv("./dataset/Bayesian_Disruption_Shot_List.csv", index = False)
-    df_efit.to_csv("./dataset/Bayesian_Disruption_efit.csv", index = False)
-    df_ece.to_csv("./dataset/Bayesian_Disruption_ece.csv", index = False)
-    df_diag.to_csv("./dataset/Bayesian_Disruption_diag.csv", index = False)
-    df_ts.to_csv("./dataset/Bayesian_Disruption_thomson.csv", index = False)
+    if datatype == 'csv':
+        df_disrupt.to_csv("./dataset/Bayesian_Disruption_Shot_List.csv", index = False)
+        df_efit.to_csv("./dataset/Bayesian_Disruption_efit.csv", index = False)
+        df_ece.to_csv("./dataset/Bayesian_Disruption_ece.csv", index = False)
+        df_diag.to_csv("./dataset/Bayesian_Disruption_diag.csv", index = False)
+        df_ts.to_csv("./dataset/Bayesian_Disruption_thomson.csv", index = False)
+    else:
+        df_disrupt.to_csv("./dataset/Bayesian_Disruption_Shot_List.csv", index = False)
+        df_efit.to_pickle("./dataset/Bayesian_Disruption_efit.pkl")
+        df_ece.to_pickle("./dataset/Bayesian_Disruption_ece.pkl")
+        df_diag.to_pickle("./dataset/Bayesian_Disruption_diag.pkl")
+        df_ts.to_pickle("./dataset/Bayesian_Disruption_thomson.pkl")
+        
     print("# done")

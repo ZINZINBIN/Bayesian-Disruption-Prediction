@@ -112,7 +112,15 @@ class MultiSignalDataset(Dataset):
             indices = []
             labels = []
             
-            idx_efit = int(tftsrt / self.dt) // 5
+            if self.dt == 0.01:
+                idx_efit = int(tftsrt / self.dt) // 5
+                ratio = 5
+                dt_efit_ece = 0.045
+            elif self.dt == 0.001:
+                idx_efit = int(tftsrt / self.dt) // 10
+                ratio = 10
+                dt_efit_ece = 0.009
+                
             idx_ece = int(tftsrt / self.dt)
             idx_diag = int(tftsrt / self.dt)
             
@@ -126,16 +134,16 @@ class MultiSignalDataset(Dataset):
                 t_ece = df_ece_shot.iloc[idx_ece]['time']
                 t_diag = df_diag_shot.iloc[idx_diag]['time']
                 
-                assert abs(t_diag - t_ece) <= 0.02, "Dignostic data and ECE data are not consistent"
+                assert abs(t_diag - t_ece) <= self.dt * 2, "Dignostic data and ECE data are not consistent"
                 
                 # end condition
-                if idx_ece_last - idx_ece - self.seq_len_ece - self.dist < 0 or idx_efit_last - idx_efit - self.seq_len_efit - self.dist // 5 < 0:
+                if idx_ece_last - idx_ece - self.seq_len_ece - self.dist < 0 or idx_efit_last - idx_efit - self.seq_len_efit - self.dist // ratio < 0:
                     break
                 
                 # synchronize t_efit and t_ece
-                if t_efit <= t_ece - 0.05:
+                if t_efit <= t_ece - dt_efit_ece:
                     t_diff = t_ece - t_efit
-                    idx_efit += int(round(t_diff / self.dt / 5, 1))
+                    idx_efit += int(round(t_diff / self.dt / ratio, 1))
                 
                 if t_ece >= tftsrt and t_ece < t_disrupt - self.dt * (2.0 * self.seq_len_ece + self.dist):
                     indx_ece = df_ece_shot.index.values[idx_ece]
@@ -144,10 +152,15 @@ class MultiSignalDataset(Dataset):
                     
                     indices.append((indx_efit, indx_ece, indx_diag))
                     labels.append(1)
-        
-                    idx_ece += self.seq_len_ece // 5
-                    idx_diag += self.seq_len_diag // 5
-                
+                    
+                    if self.dt == 0.01:
+                        idx_ece += self.seq_len_ece // 10
+                        idx_diag += self.seq_len_diag // 10
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += self.seq_len_ece // 50
+                        idx_diag += self.seq_len_diag // 50
+                    
                 elif t_ece >=  t_disrupt - self.dt * (2.0 * self.seq_len_ece + self.dist) and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist):
                     indx_ece = df_ece_shot.index.values[idx_ece]
                     indx_efit = df_efit_shot.index.values[idx_efit]
@@ -156,33 +169,53 @@ class MultiSignalDataset(Dataset):
                     indices.append((indx_efit, indx_ece, indx_diag))
                     labels.append(1)
                     
-                    idx_ece += self.seq_len_ece // 10
-                    idx_diag += self.seq_len_diag // 10
+                    idx_ece += 1
+                    idx_diag += 1
                     
-                    # idx_ece += self.seq_len_ece // 25
-                    # idx_diag += self.seq_len_diag // 25
+                    if self.dt == 0.01:
+                        idx_ece += 1
+                        idx_diag += 1
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += 5
+                        idx_diag += 5
                 
-                elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= t_disrupt - self.dt * self.seq_len_ece + 2 * self.dt:
+                elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= tipminf - self.dt * self.seq_len_ece + self.dt * 2:
                     indx_ece = df_ece_shot.index.values[idx_ece]
                     indx_efit = df_efit_shot.index.values[idx_efit]
                     indx_diag = df_diag_shot.index.values[idx_diag]
                     
                     indices.append((indx_efit, indx_ece, indx_diag))
                     labels.append(0)
-
-                    idx_ece += 1
-                    idx_diag += 1
+                    
+                    if self.dt == 0.01:
+                        idx_ece += 1
+                        idx_diag += 1
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += 5
+                        idx_diag += 5
                 
-                elif t_ece < tftsrt:
-                    idx_ece += self.seq_len_ece // 5
-                    idx_diag += self.seq_len_diag // 5
+                elif t_ece < tftsrt:                
+                    if self.dt == 0.01:
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += self.seq_len_ece // 50
+                        idx_diag += self.seq_len_diag // 50
                     
                 elif t_ece > t_disrupt:
                     break
                 
                 else:
-                    idx_ece += self.seq_len_ece // 5
-                    idx_diag += self.seq_len_diag // 5
+                    if self.dt == 0.01:
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += self.seq_len_ece // 50
+                        idx_diag += self.seq_len_diag // 50
             
             self.shot_num.extend([shot for _ in range(len(indices))])
             self.indices.extend(indices)
@@ -223,7 +256,15 @@ class MultiSignalDataset(Dataset):
             labels = []
             dists = []
             
-            idx_efit = int(tftsrt / self.dt) // 5
+            if self.dt == 0.01:
+                idx_efit = int(tftsrt / self.dt) // 5
+                ratio = 5
+                dt_efit_ece = 0.045
+            elif self.dt == 0.001:
+                idx_efit = int(tftsrt / self.dt) // 10
+                ratio = 10
+                dt_efit_ece = 0.009
+
             idx_ece = int(tftsrt / self.dt)
             idx_diag = int(tftsrt / self.dt)
             
@@ -237,34 +278,44 @@ class MultiSignalDataset(Dataset):
                 t_ece = df_ece_shot.iloc[idx_ece]['time']
                 t_diag = df_diag_shot.iloc[idx_diag]['time']
                 
-                assert abs(t_diag - t_ece) <= 0.02, "Dignostic data and ECE data are not consistent"
+                assert abs(t_diag - t_ece) <= self.dt * 2, "Dignostic data and ECE data are not consistent"
                 
                 # end condition
-                if idx_ece_last - idx_ece - self.seq_len_ece - self.dist < 0 or idx_efit_last - idx_efit - self.seq_len_efit - self.dist // 5 < 0:
+                if idx_ece_last - idx_ece - self.seq_len_ece - self.dist < 0 or idx_efit_last - idx_efit - self.seq_len_efit - self.dist // ratio < 0:
                     break
                 
                 # synchronize t_efit and t_ece
-                if t_efit <= t_ece - 0.05:
+                if t_efit <= t_ece - dt_efit_ece:
                     t_diff = t_ece - t_efit
-                    idx_efit += int(round(t_diff / self.dt / 5, 1))
+                    idx_efit += int(round(t_diff / self.dt / ratio, 1))
                 
-                if t_ece >= tftsrt and t_ece < t_disrupt - self.dt * (1.5 * self.seq_len_ece + self.dist):
+                if t_ece >= tftsrt and t_ece < t_disrupt - self.dt * (2.0 * self.seq_len_ece + self.dist):
                     indx_ece = df_ece_shot.index.values[idx_ece]
                     indx_efit = df_efit_shot.index.values[idx_efit]
                     indx_diag = df_diag_shot.index.values[idx_diag]
         
-                    idx_ece += self.seq_len_ece // 5
-                    idx_diag += self.seq_len_diag // 5
+                    if self.dt == 0.01:
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += self.seq_len_ece // 10
+                        idx_diag += self.seq_len_diag // 10
                 
-                elif t_ece >=  t_disrupt - self.dt * (1.5 * self.seq_len_ece + self.dist) and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist):
+                elif t_ece >=  t_disrupt - self.dt * (2.0 * self.seq_len_ece + self.dist) and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist):
                     indx_ece = df_ece_shot.index.values[idx_ece]
                     indx_efit = df_efit_shot.index.values[idx_efit]
                     indx_diag = df_diag_shot.index.values[idx_diag]
                     
-                    idx_ece += self.seq_len_ece // 10
-                    idx_diag += self.seq_len_diag // 10
+                    if self.dt == 0.01:
+                        idx_ece += self.seq_len_ece // 10
+                        idx_diag += self.seq_len_diag // 10
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += self.seq_len_ece // 50
+                        idx_diag += self.seq_len_diag // 50
                 
-                elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= t_disrupt - self.dt * self.seq_len_ece + 2 * self.dt:
+                elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= tipminf - self.dt * self.seq_len_ece + 2 * self.dt:
                     indx_ece = df_ece_shot.index.values[idx_ece]
                     indx_efit = df_efit_shot.index.values[idx_efit]
                     indx_diag = df_diag_shot.index.values[idx_diag]
@@ -275,19 +326,35 @@ class MultiSignalDataset(Dataset):
                     pred_time = t_disrupt - t_ece - self.dt * self.seq_len_ece
                     dists.append(pred_time)
 
-                    idx_ece += 1
-                    idx_diag += 1
+                    if self.dt == 0.01:
+                        idx_ece += 1
+                        idx_diag += 1
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += 5
+                        idx_diag += 5
                 
                 elif t_ece < tftsrt:
-                    idx_ece += self.seq_len_ece // 5
-                    idx_diag += self.seq_len_diag // 5
+                    
+                    if self.dt == 0.01:
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += self.seq_len_ece // 50
+                        idx_diag += self.seq_len_diag // 50
                     
                 elif t_ece > t_disrupt:
                     break
                 
                 else:
-                    idx_ece += self.seq_len_ece // 5
-                    idx_diag += self.seq_len_diag // 5
+                    if self.dt == 0.01:
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += self.seq_len_ece // 50
+                        idx_diag += self.seq_len_diag // 50
             
             self.shot_num.extend([shot for _ in range(len(indices))])
             self.indices.extend(indices)

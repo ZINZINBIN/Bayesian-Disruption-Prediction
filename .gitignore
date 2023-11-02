@@ -4,6 +4,9 @@
 # csv file
 *.csv
 
+# pickle file
+*.pkl
+
 # npz file
 *.npz
 
