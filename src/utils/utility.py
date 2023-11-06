@@ -58,7 +58,6 @@ def deterministic_split(shot_list : List, test_size : float = 0.2):
     
     return train_list, test_list
 
-
 # train-test split for 0D data models
 def preparing_0D_dataset(
     filepath:Dict[str, str],
@@ -240,7 +239,7 @@ class MultiSignalDataset(Dataset):
                 t_diff = t_ece - t_efit
                 idx_efit += int(round(t_diff / self.dt / ratio, 1))
                 
-            if t_ece >= tftsrt and t_ece <= t_max - self.dt * (self.seq_len_ece + self.dist) * 1.25:
+            if t_ece >= tftsrt and t_ece <= t_disrupt - self.dt * (self.seq_len_ece + self.dist) * 2.0:
                 indx_ece = self.data_ece.index.values[idx_ece]
                 indx_efit = self.data_efit.index.values[idx_efit]
                 indx_diag = self.data_diag.index.values[idx_diag]
@@ -255,7 +254,39 @@ class MultiSignalDataset(Dataset):
                 elif self.dt == 0.001:
                     idx_ece += 5
                     idx_diag += 5
+                    
+            elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) * 2.0 and t_ece <= t_disrupt - self.dt * self.seq_len_ece:
+                indx_ece = self.data_ece.index.values[idx_ece]
+                indx_efit = self.data_efit.index.values[idx_efit]
+                indx_diag = self.data_diag.index.values[idx_diag]
+                
+                self.time_slice.append(t_ece + self.seq_len_ece * self.dt)
+                self.indices.append((indx_efit, indx_ece, indx_diag))
+                
+                if self.dt == 0.01:
+                    idx_ece += 1
+                    idx_diag += 1
+                        
+                elif self.dt == 0.001:
+                    idx_ece += 1
+                    idx_diag += 1
             
+            elif t_ece >= t_disrupt - self.dt * self.seq_len_ece and t_ece <= t_max - self.dt * (self.seq_len_ece + self.dist) * 1.0:
+                indx_ece = self.data_ece.index.values[idx_ece]
+                indx_efit = self.data_efit.index.values[idx_efit]
+                indx_diag = self.data_diag.index.values[idx_diag]
+                
+                self.time_slice.append(t_ece + self.seq_len_ece * self.dt)
+                self.indices.append((indx_efit, indx_ece, indx_diag))
+                
+                if self.dt == 0.01:
+                    idx_ece += 1
+                    idx_diag += 1
+                        
+                elif self.dt == 0.001:
+                    idx_ece += 5
+                    idx_diag += 5
+
             elif t_ece < tftsrt:  
                         
                 if self.dt == 0.01:
@@ -287,7 +318,7 @@ class MultiSignalDataset(Dataset):
             self.data_ece[config.ECE] = self.scaler_ece.transform(self.data_ece[config.ECE])
         
         if self.scaler_diag is not None:
-            self.data_diag[config.DIAG] = self.scaler_diag.transform(self.data_diag[config.DIAG])
+            self.data_diag[config.DIAG + config.DIAG_FE] = self.scaler_diag.transform(self.data_diag[config.DIAG + config.DIAG_FE])
             
         print("# Inference | preprocessing the data")
         
@@ -298,7 +329,7 @@ class MultiSignalDataset(Dataset):
         indx_efit, indx_ece, indx_diag = self.indices[idx]
         data_efit = self.data_efit.loc[indx_efit + 1:indx_efit + self.seq_len_efit, config.EFIT + config.EFIT_FE].values.reshape(-1, self.seq_len_efit)
         data_ece = self.data_ece.loc[indx_ece + 1:indx_ece + self.seq_len_ece, config.ECE].values.reshape(-1, self.seq_len_ece)
-        data_diag = self.data_diag.loc[indx_diag + 1:indx_diag + self.seq_len_diag, config.DIAG].values.reshape(-1, self.seq_len_diag)
+        data_diag = self.data_diag.loc[indx_diag + 1:indx_diag + self.seq_len_diag, config.DIAG + config.DIAG_FE].values.reshape(-1, self.seq_len_diag)
  
         data_efit = torch.from_numpy(data_efit).float()
         data_ece = torch.from_numpy(data_ece).float()
@@ -632,6 +663,7 @@ def generate_model_performance(
     data_efit = data_efit[data_efit.shot == shot_num]
     data_ece = data_ece[data_ece.shot == shot_num]
     data_diag = data_diag[data_diag.shot == shot_num]
+    data_disrupt = data_disrupt[data_disrupt.shot == shot_num]
     
     dataset = MultiSignalDataset(
         data_disrupt,
@@ -706,11 +738,11 @@ def generate_model_performance(
                 for key in feat.keys():
                     feature_dict[key].append(feat[key])
     
+    # breakpoint()
     n_ftsrt = int(dataset.time_slice[0] // dt)
-    time_slice = [v for v in dataset.time_slice]
-    time_slice = np.linspace(0, dataset.time_slice[0] - dt, n_ftsrt).tolist() + time_slice 
+    time_slice = np.linspace(0, dataset.time_slice[0] - dt, n_ftsrt).tolist() + [v for v in dataset.time_slice] 
     probs = np.array([0] * n_ftsrt + prob_list)
-    # probs = moving_avarage_smoothing(probs, 8, 'backward')
+    probs = moving_avarage_smoothing(probs, 12, 'center')
     
     print("time_slice : ", len(time_slice))
     print("prob_list : ", len(probs))

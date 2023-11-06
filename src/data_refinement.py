@@ -3,7 +3,7 @@ import numpy as np
 import warnings
 from tqdm.auto import tqdm
 from src.config import Config
-from src.utils.compute import compute_GreenWald_density, compute_tau_e, compute_Troyon_beta
+from src.utils.compute import compute_GreenWald_density, compute_tau_e, compute_Troyon_beta, compute_tau_e, compute_dWdt
 
 warnings.filterwarnings(action = 'ignore')
 
@@ -262,6 +262,15 @@ if __name__ == "__main__":
     # feature engineering
     compute_GreenWald_density(df_efit)
     compute_Troyon_beta(df_efit)
+    compute_tau_e(df_diag)
+    compute_dWdt(df_diag)
+    
+    df_diag['\\TAUE'] = df_diag['\\TAUE'].apply(lambda x : bound(x, 1e1))
+    df_diag['\\DWDT'] = df_diag['\\DWDT'].apply(lambda x : bound(x, 1e2))
+    
+    # additional nan handling for new features
+    df_diag['\\TAUE'] = df_diag['\\TAUE'].fillna(0)
+    df_diag['\\DWDT'] = df_diag['\\DWDT'].fillna(0)
     
     # saving file
     print('\n',"="*50)
@@ -269,7 +278,7 @@ if __name__ == "__main__":
     
     df_efit = df_efit[['shot','time'] + config.EFIT + config.EFIT_FE]
     df_ece = df_ece[['shot','time'] + config.ECE]
-    df_diag = df_diag[['shot','time'] + config.DIAG]
+    df_diag = df_diag[['shot','time'] + config.DIAG + config.DIAG_FE]
     df_ts = df_ts[['shot','time'] + config.TS_TE + config.TS_NE]
     
     if datatype == 'csv':

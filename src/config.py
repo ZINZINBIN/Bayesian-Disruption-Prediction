@@ -17,8 +17,7 @@ class Config():
       # EFIT = ['\\q0', '\\q95', '\\ipmhd', '\\kappa', '\\tritop','\\tribot', '\\betap', '\\betan', '\\li', '\\bcentr', '\\rsurf', '\\aminor',]
       EFIT = ['\\q95', '\\qmin', '\\ipmhd', '\\kappa', '\\tritop','\\tribot', '\\betap', '\\betan', '\\li', '\\bcentr', '\\rsurf', '\\aminor','\\drsep', '\\rxpt1', '\\zxpt1', '\\rxpt2', '\\zxpt2']
       
-      # Feature engineering
-      # EFIT_FE = ['\\nG'] # ['\\nG', '\\nG_tci01', '\\nG_tci02', '\\nG_tci03', '\\nG_tci04', '\\nG_tci05']
+      # EFIT feature engineering
       EFIT_FE = ['\\nG', '\\troyon']
       
       # ECE
@@ -58,10 +57,13 @@ class Config():
       
       DIAG = LM + DL + HCM + TCI + LV + RC + HA + MP + ECH + NBH + BOL
       
+      # Diagnostic feature engineering
+      DIAG_FE = ['\\TAUE', '\\DWDT']
+      
       COLUMN_NAME_SCALER = {
             "efit":EFIT + EFIT_FE,
             "ece":ECE,
-            "diag":DIAG
+            "diag":DIAG + DIAG_FE
       }
       
       # default
@@ -70,10 +72,10 @@ class Config():
                   "num_inputs":len(EFIT + EFIT_FE),
                   "hidden_dim":64,
                   "num_channels":[64] * 5,
-                  "kernel_size":3,
+                  "kernel_size":4,
                   "dropout":0.1,
                   "dilation_size":calc_dilation(3, 2, 5, 1024),
-                  "seq_len":10 * 5
+                  "seq_len":10 * 5 * 2
             },
             "ece":{
                   "num_inputs":len(ECE),
@@ -82,16 +84,16 @@ class Config():
                   "kernel_size":4,
                   "dropout":0.1,
                   "dilation_size":calc_dilation(4, 2, 5, 1024 * 8),
-                  "seq_len":50 * 10
+                  "seq_len":50 * 10 * 2
             },
             "diag":{
-                  "num_inputs":len(DIAG),
+                  "num_inputs":len(DIAG + DIAG_FE),
                   "hidden_dim":64,
                   "num_channels":[64] * 5,
                   "kernel_size":4,
                   "dropout":0.1,
                   "dilation_size":calc_dilation(4, 2, 5, 1024 * 8),
-                  "seq_len":50 * 10
+                  "seq_len":50 * 10 * 2
             }
       }
       

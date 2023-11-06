@@ -89,7 +89,7 @@ class MultiSignalDataset(Dataset):
             self.data_ece[config.ECE] = self.scaler_ece.transform(self.data_ece[config.ECE])
         
         if self.scaler_diag is not None:
-            self.data_diag[config.DIAG] = self.scaler_diag.transform(self.data_diag[config.DIAG])
+            self.data_diag[config.DIAG + config.DIAG_FE] = self.scaler_diag.transform(self.data_diag[config.DIAG + config.DIAG_FE])
             
         print("# {} | preprocessing the data".format(self.task))
     
@@ -158,8 +158,8 @@ class MultiSignalDataset(Dataset):
                         idx_diag += self.seq_len_diag // 10
                         
                     elif self.dt == 0.001:
-                        idx_ece += self.seq_len_ece // 50
-                        idx_diag += self.seq_len_diag // 50
+                        idx_ece += self.seq_len_ece // 10
+                        idx_diag += self.seq_len_diag // 10
                     
                 elif t_ece >=  t_disrupt - self.dt * (2.0 * self.seq_len_ece + self.dist) and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist):
                     indx_ece = df_ece_shot.index.values[idx_ece]
@@ -168,9 +168,6 @@ class MultiSignalDataset(Dataset):
                     
                     indices.append((indx_efit, indx_ece, indx_diag))
                     labels.append(1)
-                    
-                    idx_ece += 1
-                    idx_diag += 1
                     
                     if self.dt == 0.01:
                         idx_ece += 1
@@ -202,8 +199,8 @@ class MultiSignalDataset(Dataset):
                         idx_diag += self.seq_len_diag // 5
                         
                     elif self.dt == 0.001:
-                        idx_ece += self.seq_len_ece // 50
-                        idx_diag += self.seq_len_diag // 50
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
                     
                 elif t_ece > t_disrupt:
                     break
@@ -214,8 +211,8 @@ class MultiSignalDataset(Dataset):
                         idx_diag += self.seq_len_diag // 5
                         
                     elif self.dt == 0.001:
-                        idx_ece += self.seq_len_ece // 50
-                        idx_diag += self.seq_len_diag // 50
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
             
             self.shot_num.extend([shot for _ in range(len(indices))])
             self.indices.extend(indices)
@@ -295,8 +292,8 @@ class MultiSignalDataset(Dataset):
                     indx_diag = df_diag_shot.index.values[idx_diag]
         
                     if self.dt == 0.01:
-                        idx_ece += self.seq_len_ece // 5
-                        idx_diag += self.seq_len_diag // 5
+                        idx_ece += self.seq_len_ece // 10
+                        idx_diag += self.seq_len_diag // 10
                         
                     elif self.dt == 0.001:
                         idx_ece += self.seq_len_ece // 10
@@ -312,8 +309,8 @@ class MultiSignalDataset(Dataset):
                         idx_diag += self.seq_len_diag // 10
                         
                     elif self.dt == 0.001:
-                        idx_ece += self.seq_len_ece // 50
-                        idx_diag += self.seq_len_diag // 50
+                        idx_ece += self.seq_len_ece // 10
+                        idx_diag += self.seq_len_diag // 10
                 
                 elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= tipminf - self.dt * self.seq_len_ece + 2 * self.dt:
                     indx_ece = df_ece_shot.index.values[idx_ece]
@@ -369,7 +366,7 @@ class MultiSignalDataset(Dataset):
         
         data_efit = self.data_efit.loc[indx_efit + 1:indx_efit + self.seq_len_efit, config.EFIT + config.EFIT_FE].values.reshape(-1, self.seq_len_efit)
         data_ece = self.data_ece.loc[indx_ece + 1:indx_ece + self.seq_len_ece, config.ECE].values.reshape(-1, self.seq_len_ece)
-        data_diag = self.data_diag.loc[indx_diag + 1:indx_diag + self.seq_len_diag, config.DIAG].values.reshape(-1, self.seq_len_diag)
+        data_diag = self.data_diag.loc[indx_diag + 1:indx_diag + self.seq_len_diag, config.DIAG + config.DIAG_FE].values.reshape(-1, self.seq_len_diag)
  
         data_efit = torch.from_numpy(data_efit).float()
         data_ece = torch.from_numpy(data_ece).float()

@@ -160,7 +160,7 @@ if __name__ == "__main__":
     
     # dataset setup 
     train_list, valid_list, test_list, scaler_list = preparing_0D_dataset(config.filepath, None, args['scaler'], args['test_shot_num'])
-    
+
     print("================= Dataset information =================")
     train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train')
     valid_data = MultiSignalDataset(valid_list['disrupt'], valid_list['efit'], valid_list['ece'], valid_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'valid')
@@ -266,7 +266,7 @@ if __name__ == "__main__":
     
     # evaluation process
     print("\n====================== evaluation process ======================\n")
-    # model.load_state_dict(torch.load(save_best_dir))
+    model.load_state_dict(torch.load(save_best_dir))
     
     save_conf = os.path.join(save_dir, "test_confusion.png")
     save_txt = os.path.join(save_dir, "test_eval.txt")

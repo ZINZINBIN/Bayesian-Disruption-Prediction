@@ -3,7 +3,7 @@ import pandas as pd
 import math
 from typing import Literal
 
-def compute_tau_e(df:pd.DataFrame):
+def compute_tau(df:pd.DataFrame):
     
     def _pow(x, p : float):
         return math.pow(x, p)
@@ -38,7 +38,31 @@ def compute_tau_e(df:pd.DataFrame):
     
     for key, value in tau_L_factors:
         df['\\tau_L_89'] *= _pow(df[key], value)
+
+def compute_tau_e(df:pd.DataFrame):
+    df['\\PIN'] = df[['\\EC1_PWR','\\EC2_PWR','\\EC3_PWR','\\EC4_PWR','\\EC5_PWR','\\nb11_pnb','\\nb12_pnb','\\nb13_pnb']].sum(axis = 1).values
+    df['\\TAUE'] = df['\\PIN'] / df['\\WTOT_DLM03']
     
+def compute_dWdt(df:pd.DataFrame):
+    shot_list = df.shot.unique()
+    df['\\DWDT'] = np.array([0 for _ in range(len(df['\\WTOT_DLM03']))])
+    
+    for shot in shot_list:
+        
+        indice = df[df.shot == shot].index.values
+        
+        dvl = df['\\WTOT_DLM03'].loc[indice].shift(1).fillna(method = 'bfill').values
+        dvr = df['\\WTOT_DLM03'].loc[indice].shift(-1).fillna(method = 'ffill').values
+        
+        dtl = df.loc[indice].time.shift(1).fillna(method = 'bfill').values
+        dtr = df.loc[indice].time.shift(-1).fillna(method = 'ffill').values
+        
+        dv = dvr - dvl
+        dt = dtr - dtl
+        
+        df['\\DWDT'].loc[indice] = dv / dt
+
+
 def compute_GreenWald_density(df : pd.DataFrame):
     df['\\nG'] = df['\\ipmhd'].abs() / math.pi / df['\\aminor'] ** 2
       

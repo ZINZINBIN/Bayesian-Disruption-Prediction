@@ -9,7 +9,7 @@ from tqdm.auto import tqdm
 from scipy.interpolate import SmoothBivariateSpline
 from typing import Literal
 
-def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 8, method : Literal['PCA', 'tSNE'] = 'PCA'):
+def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'tSNE'):
     model.to(device)
     model.eval()
     
@@ -57,7 +57,7 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
     return
     
 # revised : visualize 2D latent space and decision boundary at once
-def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/decision_boundary_2D_space.png', limit_iters : int = 8, method : Literal['PCA', 'tSNE'] = 'PCA'):
+def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/decision_boundary_2D_space.png', limit_iters : int = 2, method : Literal['PCA', 'tSNE'] = 'tSNE'):
     model.to(device)
     model.eval()
     
@@ -128,7 +128,7 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
     
     return
     
-def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 8, method : Literal['PCA', 'tSNE'] = 'PCA'):
+def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device : str = 'cpu', save_dir : str = './results/latent_2d_space.png', limit_iters : int = 8, method : Literal['PCA', 'tSNE'] = 'tSNE'):
     model.to(device)
     model.eval()
     
@@ -175,5 +175,4 @@ def visualize_3D_latent_space(model : nn.Module, dataloader : DataLoader, device
     ax.legend()
     fig.tight_layout()
     plt.savefig(save_dir)
-    
     return

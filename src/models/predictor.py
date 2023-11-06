@@ -15,7 +15,7 @@ class Predictor(nn.Module):
             [key, self.create_base_model(header_config[key])] for key in header_config.keys()
         ])
         
-        self.noise = NoiseLayer(mean = 0, std = 1.0)
+        self.noise = NoiseLayer(mean = 0, std = 0.1)
         self.classifier_config = classifier_config
         self.device = device
           
@@ -91,7 +91,7 @@ class BayesianPredictor(nn.Module):
             [key, self.create_base_model(header_config[key])] for key in header_config.keys()
         ])
         
-        self.noise = NoiseLayer(mean = 0, std = 1.0)
+        self.noise = NoiseLayer(mean = 0, std = 0.1)
         
         self.classifier_config = classifier_config
         self.device = device
