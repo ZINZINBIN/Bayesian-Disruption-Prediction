@@ -12,6 +12,7 @@ from src.train_bayes import train
 from src.evaluate import evaluate, evaluate_prediction_performance
 from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
 from src.models.predictor import BayesianPredictor
+from src.transfer_weight import load_pretrained_weight
 from src.config import Config
 
 config = Config()
@@ -47,6 +48,9 @@ def parsing():
     parser.add_argument("--dt", type = float, default = 0.001)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
+    parser.add_argument("--continue_learning", type = bool, default = False)
+    parser.add_argument("--transfer_learning", type = bool, default = False)
+    parser.add_argument("--freeze", type = bool, default = False)
     
     # scaler type
     parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "Robust")
@@ -176,8 +180,23 @@ if __name__ == "__main__":
     
     print("\n==================== model summary ====================\n")
     model.to(device)
+    
+    if os.path.exists(save_best_dir) and args['continue_learning']:
+        print("\nselect continue learning: training process begins from the best weights of previous learning process")
+        model.load_state_dict(torch.load(save_best_dir))
+    
+    elif args['transfer_learning']:
+        print("\nselect transfer learning: training process begins with trasferred weights from the non-Bayesian model")
+        tag_transferred = "{}_warning_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args['dist_warning'], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
+        path_transferred = "./weights/{}_best.pt".format(tag_transferred)
+        
+        if os.path.exists(path_transferred):
+            load_pretrained_weight(model, config, path_transferred, device, args['freeze'])
+        else:
+            print("\nNo weights file: ignore transfer learning")
+    
     model.summary()
-
+    
     # optimizer
     if args["optimizer"] == "SGD":
         optimizer = torch.optim.SGD(model.parameters(), lr = args['lr'])

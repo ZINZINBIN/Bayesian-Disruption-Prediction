@@ -47,6 +47,7 @@ def parsing():
     parser.add_argument("--dt", type = float, default = 0.001)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
+    parser.add_argument("--continue_learning", type = bool, default = False)
     
     # scaler type
     parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "Robust")
@@ -173,6 +174,10 @@ if __name__ == "__main__":
     
     # define model
     model = Predictor(config.header_config, config.classifier_config, device)
+    
+    if os.path.exists(save_best_dir) and args['continue_learning']:
+        print("\nselect continue learning: training process begins from the best weights of previous learning process")
+        model.load_state_dict(torch.load(save_best_dir))
     
     print("\n==================== model summary ====================\n")
     model.to(device)

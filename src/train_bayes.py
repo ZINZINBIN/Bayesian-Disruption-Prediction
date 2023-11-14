@@ -39,7 +39,7 @@ def train_per_epoch(
     total_size = 0
 
     for batch_idx, data in enumerate(train_loader):
-       
+        
         optimizer.zero_grad()
         pi_weight = minibatch_weight(batch_idx, num_batches=len(train_loader))
 
@@ -48,7 +48,7 @@ def train_per_epoch(
             inputs = data,
             targets = data['label'].to(device),
             criterion = loss_fn,
-            n_samples = 8,
+            n_samples = 4,
             w_complexity = pi_weight
         )
             
@@ -124,7 +124,7 @@ def valid_per_epoch(
                 inputs = data,
                 targets = data['label'].to(device),
                 criterion = loss_fn,
-                n_samples = 8,
+                n_samples = 4,
                 w_complexity = pi_weight
             )
     
