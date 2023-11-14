@@ -32,37 +32,23 @@ def parsing():
     parser.add_argument("--gpu_num", type = int, default = 0)
     
     # mode : predicting thermal quench vs current quench
-    parser.add_argument("--mode", type = str, default = 'CQ', choices=['TQ','CQ'])
+    parser.add_argument("--mode", type = str, default = 'TQ', choices=['TQ','CQ'])
 
     # batch size / sequence length / epochs / distance / num workers / pin memory use
     parser.add_argument("--batch_size", type = int, default = 100)
     parser.add_argument("--num_epoch", type = int, default = 128)
-    parser.add_argument("--seq_len_efit", type = int, default = 10)
-    parser.add_argument("--seq_len_ece", type = int, default = 50)
-    parser.add_argument("--seq_len_diag", type = int, default = 50)
-    parser.add_argument("--dist", type = int, default = 4)
-    parser.add_argument("--dt", type = float, default = 0.01)
+    parser.add_argument("--seq_len_efit", type = int, default = 100)
+    parser.add_argument("--seq_len_ece", type = int, default = 1000)
+    parser.add_argument("--seq_len_diag", type = int, default = 1000)
+    parser.add_argument("--dist_warning", type = int, default=400)
+    parser.add_argument("--dist", type = int, default = 40)
+    parser.add_argument("--dt", type = float, default = 0.001)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
     
     # scaler type
     parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "Robust")
     
-    # optimizer : SGD, RMSProps, Adam, AdamW
-    parser.add_argument("--optimizer", type = str, default = "AdamW", choices=["SGD","RMSProps","Adam","AdamW"])
-    
-    # learning rate, step size and decay constant
-    parser.add_argument("--lr", type = float, default = 2e-4)
-    parser.add_argument("--use_scheduler", type = bool, default = True)
-    parser.add_argument("--step_size", type = int, default = 4)
-    parser.add_argument("--gamma", type = float, default = 0.95)
-    
-    # early stopping
-    parser.add_argument('--early_stopping', type = bool, default = True)
-    parser.add_argument("--early_stopping_patience", type = int, default = 40)
-    parser.add_argument("--early_stopping_verbose", type = bool, default = True)
-    parser.add_argument("--early_stopping_delta", type = float, default = 1e-3)
-
     # imbalanced dataset processing
     # Re-sampling
     parser.add_argument("--use_sampling", type = bool, default = False)
@@ -84,9 +70,6 @@ def parsing():
     
     # Focal Loss parameter
     parser.add_argument("--focal_gamma", type = float, default = 2.0)
-    
-    # monitoring the training process
-    parser.add_argument("--verbose", type = int, default = 16)
     
     args = vars(parser.parse_args())
 
@@ -141,7 +124,7 @@ if __name__ == "__main__":
     else:
         scale_type = args['scaler']
     
-    tag = "Bayes_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
+    tag = "Bayes_{}_warning_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args['dist_warning'], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
     
     print("================= Running code =================")
     print("Setting : {}".format(tag))
@@ -174,7 +157,7 @@ if __name__ == "__main__":
         test_list[key] = buffer
     
     print("================= Dataset information =================")
-    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test')
+    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test', args['dist_warning'])
     test_data.get_shot_num = True
     
     # define model
@@ -199,7 +182,7 @@ if __name__ == "__main__":
             test_input = data
             test_shot = int(data['shot_num'].item())
             test_label = data['label']
-            pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
+            pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
             pred = np.where(pred > 0.5, 1, 0)
             
             if pred == 1:
@@ -223,7 +206,7 @@ if __name__ == "__main__":
             test_input = data
             test_shot = int(data['shot_num'].item())
             test_label = data['label']
-            pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
+            pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
             pred = np.where(pred > 0.5, 1, 0)
             
             if pred == 0:
@@ -249,7 +232,7 @@ if __name__ == "__main__":
             test_input = data
             test_shot = int(data['shot_num'].item())
             test_label = data['label']
-            pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
+            pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
             pred = np.where(pred > 0.5, 1, 0)
             
             if pred == 0:
@@ -290,7 +273,7 @@ if __name__ == "__main__":
         test_input = data
         test_shot = int(data['shot_num'].item())
         test_label = data['label'].numpy()
-        pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
+        pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
         pred = np.where(pred > 0.5, 1, 0)
         
         if test_label == 1 and pred == 1:
@@ -302,9 +285,9 @@ if __name__ == "__main__":
             results[key].append(feat_imp[key])
         
         test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
-        au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
-        results['aus'].append(au)
-        results['eus'].append(eu)
+        au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128)
+        results['aus'].append(au[0])
+        results['eus'].append(eu[0])
         results['preds'].append(test_pred)
         results['shots'].append(test_shot)
         
@@ -321,5 +304,4 @@ if __name__ == "__main__":
                 results['cases'].append("FP")
     
     results = pd.DataFrame(results)
-    # results.to_pickle("./results/analysis_feature_importance_test.pkl") 
-    results.to_pickle("./results/analysis_feature_importance_total.pkl") 
+    results.to_pickle("./results/analysis_feature_importance_test.pkl") 

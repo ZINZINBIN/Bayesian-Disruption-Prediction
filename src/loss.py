@@ -29,9 +29,9 @@ class FocalLoss(nn.Module):
 
     def forward(self, input : torch.Tensor, target : torch.Tensor):
         weight = self.weight.to(input.device)
-        alpha = weight.gather(0, target.data.view(-1))
+        alpha = weight.gather(0, target.data.long())
         alpha = Variable(alpha)
-        return self.compute_focal_loss(F.cross_entropy(input, target, reduction = 'none', weight = None), self.gamma, alpha)
+        return self.compute_focal_loss(F.binary_cross_entropy(F.sigmoid(input).view(-1), target, reduction = 'none', weight = None), self.gamma, alpha)
 
 # Label-Distribution-Aware Margin loss
 class LDAMLoss(nn.Module):
@@ -66,8 +66,8 @@ class LDAMLoss(nn.Module):
 
         output = torch.where(idx, x_m, x)
 
-        return F.cross_entropy(self.s * output, target, weight = self.weight, reduction = 'mean')
-    
+        return F.binary_cross_entropy(self.s * F.sigmoid(output).view(-1), target, weight = self.weight, reduction = 'mean')
+
 class CELoss(nn.Module):
     def __init__(self, weight : Optional[torch.Tensor] = None):
         super(CELoss, self).__init__()
@@ -77,8 +77,11 @@ class CELoss(nn.Module):
     def update_weight(self, weight : Optional[torch.Tensor] = None):
         self.weight = weight
     
-    def forward(self, x : torch.Tensor, target : torch.Tensor):
-        return F.cross_entropy(x, target, weight = self.weight, reduction = 'mean')
+    def forward(self, input : torch.Tensor, target : torch.Tensor):
+        alpha = self.weight.gather(0, target.data.long())
+        alpha = Variable(alpha)
+        loss = alpha * F.binary_cross_entropy(F.sigmoid(input).view(-1), target, weight = None, reduction = 'none')   
+        return loss.mean()
     
 # Label smoothing
 # Reference : https://cvml.tistory.com/9
@@ -92,14 +95,14 @@ class LabelSmoothingLoss(nn.Module):
         self.dim = dim
         self.kl_weight = kl_weight
         
-    def forward(self, x : torch.Tensor, target : torch.Tensor):
-        loss = self.original_loss(x, target)
+    def forward(self, input : torch.Tensor, target : torch.Tensor):
+        loss = self.original_loss(input, target)
         
         with torch.no_grad():
-            true_dist = torch.zeros_like(x)
+            true_dist = torch.zeros_like(input)
             true_dist.fill_(self.alpha / (self.cls - 1))
             true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
         
-        log_p = x.log_softmax(dim = self.dim)
+        log_p = input.log_softmax(dim = self.dim)
         kl_loss = torch.sum(true_dist * log_p, dim = self.dim).mean()
         return loss + kl_loss * self.kl_weight

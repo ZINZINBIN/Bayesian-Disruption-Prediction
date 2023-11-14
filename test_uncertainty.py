@@ -30,36 +30,22 @@ def parsing():
     parser.add_argument("--gpu_num", type = int, default = 0)
     
     # mode : predicting thermal quench vs current quench
-    parser.add_argument("--mode", type = str, default = 'CQ', choices=['TQ','CQ'])
+    parser.add_argument("--mode", type = str, default = 'TQ', choices=['TQ','CQ'])
 
     # batch size / sequence length / epochs / distance / num workers / pin memory use
     parser.add_argument("--batch_size", type = int, default = 100)
     parser.add_argument("--num_epoch", type = int, default = 128)
-    parser.add_argument("--seq_len_efit", type = int, default = 10)
-    parser.add_argument("--seq_len_ece", type = int, default = 50)
-    parser.add_argument("--seq_len_diag", type = int, default = 50)
-    parser.add_argument("--dist", type = int, default = 4)
-    parser.add_argument("--dt", type = float, default = 0.01)
+    parser.add_argument("--seq_len_efit", type = int, default = 100)
+    parser.add_argument("--seq_len_ece", type = int, default = 1000)
+    parser.add_argument("--seq_len_diag", type = int, default = 1000)
+    parser.add_argument("--dist_warning", type=int, default=400)
+    parser.add_argument("--dist", type = int, default = 40)
+    parser.add_argument("--dt", type = float, default = 0.001)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
     
     # scaler type
     parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "Robust")
-    
-    # optimizer : SGD, RMSProps, Adam, AdamW
-    parser.add_argument("--optimizer", type = str, default = "AdamW", choices=["SGD","RMSProps","Adam","AdamW"])
-    
-    # learning rate, step size and decay constant
-    parser.add_argument("--lr", type = float, default = 2e-4)
-    parser.add_argument("--use_scheduler", type = bool, default = True)
-    parser.add_argument("--step_size", type = int, default = 4)
-    parser.add_argument("--gamma", type = float, default = 0.95)
-    
-    # early stopping
-    parser.add_argument('--early_stopping', type = bool, default = True)
-    parser.add_argument("--early_stopping_patience", type = int, default = 40)
-    parser.add_argument("--early_stopping_verbose", type = bool, default = True)
-    parser.add_argument("--early_stopping_delta", type = float, default = 1e-3)
 
     # imbalanced dataset processing
     # Re-sampling
@@ -82,9 +68,6 @@ def parsing():
     
     # Focal Loss parameter
     parser.add_argument("--focal_gamma", type = float, default = 2.0)
-    
-    # monitoring the training process
-    parser.add_argument("--verbose", type = int, default = 16)
     
     args = vars(parser.parse_args())
 
@@ -139,7 +122,7 @@ if __name__ == "__main__":
     else:
         scale_type = args['scaler']
     
-    tag = "Bayes_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
+    tag = "Bayes_{}_warning_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args['dist_warning'], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
     
     print("================= Running code =================")
     print("Setting : {}".format(tag))
@@ -158,7 +141,7 @@ if __name__ == "__main__":
     train_list, valid_list, test_list, scaler_list = preparing_0D_dataset(config.filepath, None, args['scaler'], args['test_shot_num'])
     
     print("================= Dataset information =================")
-    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test')
+    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test', args['dist_warning'])
     test_data.get_shot_num = True
     
     # define model
@@ -181,26 +164,15 @@ if __name__ == "__main__":
     from typing import Optional
     def plot_output_distribution(pred : np.ndarray, title : Optional[str] = None, save_dir : Optional[str] = None):
     
-        preds_disrupt = pred[:,0]
-        preds_normal = pred[:,1]
+        fig, ax = plt.subplots(1,1)
+        counts, bins = np.histogram(pred.reshape(-1,))
+        ax.hist(bins[:-1], bins = bins, weights = counts, color = 'gray')
         
-        fig, axes = plt.subplots(1,2)
-        counts, bins = np.histogram(preds_disrupt.reshape(-1,))
-        axes[0].hist(bins[:-1], bins = bins, weights = counts, color = 'gray')
-        
-        counts, bins = np.histogram(preds_normal.reshape(-1,))
-        axes[1].hist(bins[:-1], bins = bins, weights = counts, color = 'gray')
-        
-        axes[0].set_xlabel("Output(probs)")
-        axes[0].set_xlim([0,1.0])
-        axes[0].set_ylabel('n-samples')
-        axes[0].set_title("Disruption")
-        
-        axes[1].set_xlabel("Output(probs)")
-        axes[1].set_xlim([0,1.0])
-        axes[1].set_ylabel('n-samples')
-        axes[1].set_title('Normal')
-        
+        ax.set_xlabel("Output (prob)")
+        ax.set_xlim([0, 1.0])
+        ax.set_ylabel('n-samples')
+        ax.set_title("Probability histogram")
+   
         if title:
             plt.suptitle(title)
             
@@ -209,30 +181,7 @@ if __name__ == "__main__":
         if save_dir:
             plt.savefig(save_dir)
             
-        return fig, axes
-    
-    for idx, data in enumerate(test_loader):
-        
-        if data['label'].numpy() == 0:
-            test_input = data
-            test_shot = int(data['shot_num'].item())
-            test_label = data['label']
-            pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
-            pred = np.where(pred > 0.5, 1, 0)
-            
-            if pred == 1:
-                break
-        
-    test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
-    au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
-    
-    print("\n====================== True Negative case ======================\n")
-    print("true label : ", test_label)
-    print("test shot : ", test_shot)
-    print("aleatoric uncertainty: ", au)
-    print("epistemic uncertainty: ", eu)
-    
-    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - Missing alarm case, shot : {}".format(test_shot), "./results/test-FN.png")
+        return fig, ax
     
     for idx, data in enumerate(test_loader):
         
@@ -240,23 +189,22 @@ if __name__ == "__main__":
             test_input = data
             test_shot = int(data['shot_num'].item())
             test_label = data['label']
-            pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
+            pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
             pred = np.where(pred > 0.5, 1, 0)
             
             if pred == 0:
                 break
         
     test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
-    au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
+    au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128)
     
-    # print("test_pred : ", test_pred)
-    print("\n====================== False Positive case ======================\n")
+    print("\n====================== False Negative case ======================\n")
     print("true label : ", test_label)
     print("test shot : ", test_shot)
-    print("aleatoric uncertainty: ", au)
-    print("epistemic uncertainty: ", eu)
+    print("aleatoric uncertainty: ", au[0])
+    print("epistemic uncertainty: ", eu[0])
     
-    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - False alarm case, shot : {}".format(test_shot), "./results/test-FP.png")
+    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - Missing alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FN.png")
     
     for idx, data in enumerate(test_loader):
         
@@ -264,23 +212,45 @@ if __name__ == "__main__":
             test_input = data
             test_shot = int(data['shot_num'].item())
             test_label = data['label']
-            pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
+            pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
             pred = np.where(pred > 0.5, 1, 0)
             
-            if pred == 0:
+            if pred == 1:
                 break
         
     test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
-    au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
+    au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128)
     
-    # print("test_pred : ", test_pred)
+    print("\n====================== False Positive case ======================\n")
+    print("true label : ", test_label)
+    print("test shot : ", test_shot)
+    print("aleatoric uncertainty: ", au[0])
+    print("epistemic uncertainty: ", eu[0])
+    
+    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - False alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FP.png")
+    
+    for idx, data in enumerate(test_loader):
+        
+        if data['label'].numpy() == 1:
+            test_input = data
+            test_shot = int(data['shot_num'].item())
+            test_label = data['label']
+            pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
+            pred = np.where(pred > 0.5, 1, 0)
+            
+            if pred == 1:
+                break
+        
+    test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
+    au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128)
+    
     print("\n====================== True Positive case ======================\n")
     print("true label : ", test_label)
     print("test shot : ", test_shot)
-    print("aleatoric uncertainty: ", au)
-    print("epistemic uncertainty: ", eu)
+    print("aleatoric uncertainty: ", au[0])
+    print("epistemic uncertainty: ", eu[0])
     
-    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - True Positive case, shot : {}".format(test_shot), "./results/test-TP.png")
+    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - True Positive case, shot : {}".format(test_shot), "./results/analysis_file/test-TP.png")
     
     # uncertainty computation for test dataset
     aus = []
@@ -288,38 +258,40 @@ if __name__ == "__main__":
     preds = []
     shots = []
     cases = []
+    dists = []
     
+    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'eval', args['dist_warning'])
+    test_sampler = RandomSampler(test_data)
+    test_loader = DataLoader(test_data, batch_size = 1, sampler=test_sampler, num_workers = 1, pin_memory=args["pin_memory"])
+
     from tqdm.auto import tqdm
     
     for idx, data in enumerate(tqdm(test_loader, 'uncertainty analysis results prepared...')):
         test_input = data
         test_shot = int(data['shot_num'].item())
         test_label = data['label'].numpy()
-        pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
+        pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
         pred = np.where(pred > 0.5, 1, 0)
+        dist = data['dist'].item()
         
-        '''
-        if test_label == 1 and pred == 1:
-            continue
-        '''
-        
-        test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
-        au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
-        aus.append(au)
-        eus.append(eu)
+        test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 32)
+        au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 32)
+        aus.append(au[0])
+        eus.append(eu[0])
         preds.append(test_pred)
         shots.append(test_shot)
+        dists.append(dist)
         
-        if test_label == 0:
-            # FN
-            if pred == 1:
-                cases.append("FN")
+        if test_label == 1:
             # TP
+            if pred == 1:
+                cases.append("TP")
+            # FN
             else:
-                cases.append("TP") 
+                cases.append("FN") 
         else:
             # FP
-            if pred == 0:
+            if pred == 1:
                 cases.append("FP")
             # TN
             else:
@@ -333,60 +305,4 @@ if __name__ == "__main__":
         "cases" : cases
     }
     results = pd.DataFrame(results)
-    results.to_pickle("./results/analysis_uncertainty_test_{}.pkl".format(tag))    
-    
-    '''
-    # uncertainty computation for training dataset
-    train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train')
-    train_data.get_shot_num = True
-    train_sampler = RandomSampler(train_data)
-    train_loader = DataLoader(train_data, batch_size = 1, sampler=train_sampler, num_workers = 1, pin_memory=args["pin_memory"])
-    
-    aus = []
-    eus = []
-    preds = []
-    shots = []
-    cases = []
-    
-    from tqdm.auto import tqdm
-    
-    for idx, data in enumerate(tqdm(train_loader, 'uncertainty analysis results prepared...')):
-        test_input = data
-        test_shot = int(data['shot_num'].item())
-        test_label = data['label'].numpy()
-        pred = torch.nn.functional.softmax(model(test_input), dim = 1)[:,1].detach().cpu().numpy()
-        pred = np.where(pred > 0.5, 1, 0)
-        
-        if test_label == 1 and pred == 1:
-            continue
-        
-        test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
-        au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128, normalized=False)
-        aus.append(au)
-        eus.append(eu)
-        preds.append(test_pred)
-        shots.append(test_shot)
-        
-        if test_label == 0:
-            # FN
-            if pred == 1:
-                cases.append("FN")
-            # TP
-            else:
-                cases.append("TP") 
-        else:
-            # FP
-            if pred == 0:
-                cases.append("FP")
-    
-    results = {
-        "au" : aus,
-        "eu" : eus,
-        "preds" : preds,
-        "shot" : shots,
-        "cases" : cases
-    }
-    
-    results = pd.DataFrame(results)
-    results.to_pickle("./results/analysis_uncertainty_train.pkl")    
-    '''
+    results.to_pickle("./results/analysis_file/analysis_uncertainty_test_{}.pkl".format(tag))    

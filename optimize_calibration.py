@@ -3,37 +3,38 @@ import os
 import numpy as np
 import pandas as pd
 import argparse
-from src.dataset import MultiSignalDataset
 from torch.utils.data import DataLoader, RandomSampler
-from src.utils.sampler import ImbalancedDatasetSampler
-from src.utils.utility import preparing_0D_dataset, generate_model_performance, seed_everything
-from src.visualization.visualize_latent_space import visualize_2D_latent_space, visualize_2D_decision_boundary
-from src.evaluate import evaluate, evaluate_detail, evaluate_prediction_performance
-from src.loss import FocalLoss, LDAMLoss, CELoss, LabelSmoothingLoss
-from src.models.predictor import Predictor
+from src.utils.utility import preparing_0D_dataset, seed_everything
+from src.models.predictor import Predictor, BayesianPredictor
+from src.dataset import MultiSignalDataset
+from src.calibration import TemperatureScaling
+from src.loss import CELoss, FocalLoss, LDAMLoss, LabelSmoothingLoss
+from src.evaluate import evaluate, evaluate_prediction_performance
 from src.config import Config
+import warnings
+from tqdm.auto import tqdm
+
+warnings.filterwarnings(action = 'ignore')
 
 config = Config()
 
 # argument parser
 def parsing():
-    parser = argparse.ArgumentParser(description="Testing disruption prediction model with multi-signal data")
+    parser = argparse.ArgumentParser(description="Optimizing calibration for misclassification")
+    
+    # choose model type
+    parser.add_argument("--model_type", type = str, default = 'Bayesian', choices=['Bayesian', 'Frequentist'])
+    
+    # learning rate and gamma for temperature scaling
+    parser.add_argument("--lr", type = float, default = 1e-3)
+    parser.add_argument("--gamma", type = float, default = 1.0)
+    parser.add_argument("--n_bins", type = int, default = 15)
     
     # choose evaluation processes
     parser.add_argument("--evaluate_train", type = bool, default = False)
     parser.add_argument("--evaluate_valid", type = bool, default = False)
     parser.add_argument("--evaluate_test", type = bool, default = False)
-    parser.add_argument("--evaluate_detail", type = bool, default = False)
-    
-    parser.add_argument("--visualize_train", type = bool, default = False)
-    parser.add_argument("--visualize_valid", type = bool, default = False)
-    parser.add_argument("--visualize_test", type = bool, default = True)
-    
-    parser.add_argument("--prediction", type = bool, default = True)
-    parser.add_argument("--plot_shot_info", type = bool, default = False)
-    parser.add_argument("--plot_uncertainty", type = bool, default = False)
-    parser.add_argument("--plot_feature_importance", type = bool, default = True)
-    
+        
     # random seed
     parser.add_argument("--random_seed", type = int, default = 42)
     
@@ -41,9 +42,6 @@ def parsing():
     parser.add_argument("--tag", type = str, default = "TCN")
     parser.add_argument("--save_dir", type = str, default = "./results")
     
-    # test shot for disruption probability curve
-    parser.add_argument("--test_shot_num", type = int, default = 30312)
-
     # gpu allocation
     parser.add_argument("--gpu_num", type = int, default = 0)
     
@@ -51,28 +49,20 @@ def parsing():
     parser.add_argument("--mode", type = str, default = 'TQ', choices=['TQ','CQ'])
 
     # batch size / sequence length / epochs / distance / num workers / pin memory use
-    parser.add_argument("--batch_size", type = int, default = 100)
+    parser.add_argument("--batch_size", type = int, default = 128)
+    parser.add_argument("--num_epoch", type = int, default = 64)
+    parser.add_argument("--num_workers", type = int, default = 4)
+    parser.add_argument("--pin_memory", type = bool, default = True)
     parser.add_argument("--seq_len_efit", type = int, default = 100)
     parser.add_argument("--seq_len_ece", type = int, default = 1000)
     parser.add_argument("--seq_len_diag", type = int, default = 1000)
     parser.add_argument("--dist_warning", type = int, default = 400)
     parser.add_argument("--dist", type = int, default = 40)
     parser.add_argument("--dt", type = float, default = 0.001)
-    parser.add_argument("--num_workers", type = int, default = 4)
-    parser.add_argument("--pin_memory", type = bool, default = True)
     
     # scaler type
     parser.add_argument("--scaler", type = str, choices=['Robust', 'Standard', 'MinMax', 'None'], default = "Robust")
     
-    # optimizer : SGD, RMSProps, Adam, AdamW
-    parser.add_argument("--optimizer", type = str, default = "AdamW", choices=["SGD","RMSProps","Adam","AdamW"])
-    
-    # learning rate, step size and decay constant
-    parser.add_argument("--lr", type = float, default = 2e-4)
-    parser.add_argument("--use_scheduler", type = bool, default = True)
-    parser.add_argument("--step_size", type = int, default = 4)
-    parser.add_argument("--gamma", type = float, default = 0.95)
-
     # imbalanced dataset processing
     # Re-sampling
     parser.add_argument("--use_sampling", type = bool, default = False)
@@ -94,10 +84,7 @@ def parsing():
     
     # Focal Loss parameter
     parser.add_argument("--focal_gamma", type = float, default = 2.0)
-    
-    # monitoring the training process
-    parser.add_argument("--verbose", type = int, default = 16)
-    
+
     args = vars(parser.parse_args())
 
     return args
@@ -138,8 +125,11 @@ if __name__ == "__main__":
         scale_type = "no_scaling"
     else:
         scale_type = args['scaler']
-    
-    tag = "{}_warning_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args['dist_warning'], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
+        
+    if args['model_type'] == 'Bayesian':
+        tag = "Bayes_{}_warning_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args['dist_warning'], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
+    else:
+        tag = "{}_warning_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args['dist_warning'], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
     
     # save directory
     save_dir = os.path.join(args['save_dir'], tag)
@@ -150,15 +140,11 @@ if __name__ == "__main__":
     if not os.path.isdir("./weights"):
         os.mkdir("./weights")
         
-    if not os.path.isdir("./runs"):
-        os.mkdir("./runs")
-    
     print("================= Running code =================")
     print("Setting : {}".format(tag))
     
     save_best_dir = "./weights/{}_best.pt".format(tag)
     save_last_dir = "./weights/{}_last.pt".format(tag)
-    exp_dir = os.path.join("./runs/", "tensorboard_{}".format(tag))
  
     # device allocation
     if(torch.cuda.device_count() >= 1):
@@ -167,38 +153,34 @@ if __name__ == "__main__":
         device = 'cpu'
     
     # dataset setup 
-    train_list, valid_list, test_list, scaler_list = preparing_0D_dataset(config.filepath, None, args['scaler'], args['test_shot_num'])
+    train_list, valid_list, test_list, scaler_list = preparing_0D_dataset(config.filepath, None, args['scaler'], None)
     
+    # define model
+    if args['model_type'] == 'Bayesian':
+        model = BayesianPredictor(config.header_config, config.classifier_config, device)
+    else:
+        model = Predictor(config.header_config, config.classifier_config, device)
+        
     print("================= Dataset information =================")
     train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train', args['dist_warning'])
     valid_data = MultiSignalDataset(valid_list['disrupt'], valid_list['efit'], valid_list['ece'], valid_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'valid', args['dist_warning'])
     test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test', args['dist_warning'])
 
-    # label distribution for LDAM / Focal Loss
-    train_data.get_num_per_cls()
-    cls_num_list = train_data.get_cls_num_list()
-    
-    # define model
-    model = Predictor(config.header_config, config.classifier_config, device)
-    
     print("\n==================== model summary ====================\n")
     model.to(device)
     model.summary()
-        
-    # Re-sampling
-    if args["use_sampling"]:
-        train_sampler = ImbalancedDatasetSampler(train_data)
-        valid_sampler = RandomSampler(valid_data)
-        test_sampler = RandomSampler(test_data)
-
-    else:
-        train_sampler = RandomSampler(train_data)
-        valid_sampler = RandomSampler(valid_data)
-        test_sampler = RandomSampler(test_data)
     
-    train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=train_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=False)
-    valid_loader = DataLoader(valid_data, batch_size = args['batch_size'], sampler=valid_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=False)
-    test_loader = DataLoader(test_data, batch_size = args['batch_size'], sampler=test_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=False)
+    train_sampler = RandomSampler(train_data)
+    valid_sampler = RandomSampler(valid_data)
+    test_sampler = RandomSampler(test_data)
+    
+    train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=train_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=True)
+    valid_loader = DataLoader(valid_data, batch_size = args['batch_size'], sampler=valid_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=True)
+    test_loader = DataLoader(test_data, batch_size = args['batch_size'], sampler=test_sampler, num_workers = args["num_workers"], pin_memory=args["pin_memory"], drop_last=True)
+    
+    # label distribution for LDAM / Focal Loss
+    train_data.get_num_per_cls()
+    cls_num_list = train_data.get_cls_num_list()
     
     # Re-weighting
     if args['use_weighting']:
@@ -225,27 +207,32 @@ if __name__ == "__main__":
     if args['use_label_smoothing']:
         loss_fn = LabelSmoothingLoss(loss_fn, alpha = args['smoothing'], kl_weight = args['kl_weight'], classes = 2)
         
-    # evaluation process
-    print("\n====================== evaluation process ======================\n")
+    # load best model
     model.load_state_dict(torch.load(save_best_dir))
+    model.eval()
     
+    # Temperature scaling 
+    model_calibrated = TemperatureScaling(model, gamma = args['gamma'])
+    model_calibrated.fit(valid_loader, loss_fn, lr = args['lr'], max_iter = args['num_epoch'], n_bins = args['n_bins'])
+    
+    # Evaluation
     if args['evaluate_train']:
         print("\nEvaluation:train-dataset\n")
         test_loss, test_acc, test_f1 = evaluate(
             train_loader,
-            model,
+            model_calibrated,
             loss_fn,
             device,
-            save_conf = os.path.join(save_dir, "train_confusion.png"),
-            save_txt = os.path.join(save_dir, "train_eval.txt")
+            save_conf = os.path.join(save_dir, "train_confusion_calibrated.png"),
+            save_txt = os.path.join(save_dir, "train_eval_calibrated.txt")
         )
         
         evaluate_prediction_performance(
             train_loader,
-            model,
+            model_calibrated,
             device,
-            save_log = os.path.join(save_dir, "train_log.csv"),
-            save_txt = os.path.join(save_dir, "train_eval_shot.txt"),
+            save_log = os.path.join(save_dir, "train_log_calibrated.csv"),
+            save_txt = os.path.join(save_dir, "train_eval_shot_calibrated.txt"),
             threshold = 0.5, 
             t_warning = args['dt'] * args['dist_warning'],
             t_minimum = args['dt'] * args['dist'],
@@ -255,19 +242,19 @@ if __name__ == "__main__":
         print("\nEvaluation:valid-dataset\n")
         test_loss, test_acc, test_f1 = evaluate(
             valid_loader,
-            model,
+            model_calibrated,
             loss_fn,
             device,
-            save_conf = os.path.join(save_dir, "valid_confusion.png"),
-            save_txt = os.path.join(save_dir, "valid_eval.txt")
+            save_conf = os.path.join(save_dir, "valid_confusion_calibrated.png"),
+            save_txt = os.path.join(save_dir, "valid_eval_calibrated.txt")
         )
         
         evaluate_prediction_performance(
             valid_loader,
-            model,
+            model_calibrated,
             device,
-            save_log = os.path.join(save_dir, "valid_log.csv"),
-            save_txt = os.path.join(save_dir, "valid_eval_shot.txt"),
+            save_log = os.path.join(save_dir, "valid_log_calibrated.csv"),
+            save_txt = os.path.join(save_dir, "valid_eval_shot_calibrated.txt"),
             threshold = 0.5, 
             t_warning = args['dt'] * args['dist_warning'],
             t_minimum = args['dt'] * args['dist'],
@@ -277,93 +264,20 @@ if __name__ == "__main__":
         print("\nEvaluation:test-dataset\n")
         test_loss, test_acc, test_f1 = evaluate(
             test_loader,
-            model,
+            model_calibrated,
             loss_fn,
             device,
-            save_conf = os.path.join(save_dir, "test_confusion.png"),
-            save_txt = os.path.join(save_dir, "test_eval.txt")
+            save_conf = os.path.join(save_dir, "test_confusion_calibrated.png"),
+            save_txt = os.path.join(save_dir, "test_eval_calibrated.txt")
         )
         
         evaluate_prediction_performance(
             test_loader,
-            model,
+            model_calibrated,
             device,
-            save_log = os.path.join(save_dir, "test_log.csv"),
-            save_txt = os.path.join(save_dir, "test_eval_shot.txt"),
+            save_log = os.path.join(save_dir, "test_log_calibrated.csv"),
+            save_txt = os.path.join(save_dir, "test_eval_shot_calibrated.txt"),
             threshold = 0.5, 
             t_warning = args['dt'] * args['dist_warning'],
             t_minimum = args['dt'] * args['dist'],
-        )
-    
-    if args['evaluate_detail']:
-        print("\nEvaluation per shot\n")
-        evaluate_detail(
-            train_loader,
-            valid_loader,
-            test_loader,
-            model,
-            device,
-            save_csv = os.path.join(save_dir, "eval_detail.csv"),
-            tag = tag
-        )
-    
-    # Additional analyzation
-    print("\n====================== Visualization process ======================\n")
-    if args['use_sampling']:
-        train_loader = DataLoader(train_data, batch_size = args['batch_size'], sampler=None, num_workers = args["num_workers"], pin_memory=args["pin_memory"])
-    
-    try:
-        if args['visualize_train']:
-            visualize_2D_latent_space(
-                model, 
-                train_loader,
-                device,
-                os.path.join(save_dir, "latent_2D_train.png")
-            )
-            visualize_2D_decision_boundary(
-                model, 
-                train_loader,
-                device,
-                os.path.join(save_dir, "decision_boundary_2D_train.png")
-            )
-        
-        if args['visualize_test']:
-            visualize_2D_latent_space(
-                model, 
-                test_loader,
-                device,
-                os.path.join(save_dir, "latent_2D_test.png")
-            )
-            
-            visualize_2D_decision_boundary(
-                model, 
-                test_loader,
-                device,
-                os.path.join(save_dir, "decision_boundary_2D_test.png")
-            )
-            
-    except:
-        print("{} : visualize 2D latent space doesn't work due to stability error".format(tag))
-    
-    # plot probability curve
-    if args['prediction']:
-        test_shot_num = args['test_shot_num']
-        print("\n====================== Probability curve generation process ======================\n")
-        generate_model_performance(
-            filepath = config.filepath,
-            model = model, 
-            device = device,
-            save_dir = save_dir,
-            shot_num = test_shot_num,
-            seq_len_efit = args['seq_len_efit'], 
-            seq_len_ece = args['seq_len_ece'],
-            seq_len_diag = args['seq_len_diag'], 
-            dist_warning = args['dist_warning'],
-            dist = args['dist'],
-            dt = args['dt'],
-            mode = args['mode'], 
-            scaler_type = args['scaler'],
-            is_plot_shot_info=args['plot_shot_info'],
-            is_plot_uncertainty=args['plot_uncertainty'],
-            is_plot_feature_importance=args['plot_feature_importance']
         )

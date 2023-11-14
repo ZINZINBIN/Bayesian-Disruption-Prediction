@@ -41,7 +41,7 @@ class Predictor(nn.Module):
             nn.Linear(self.classifier_config['cls_dim'], self.classifier_config['cls_dim']),
             nn.LayerNorm(self.classifier_config['cls_dim']),
             nn.ReLU(),
-            nn.Linear(self.classifier_config['cls_dim'], self.classifier_config['n_classes']),
+            nn.Linear(self.classifier_config['cls_dim'], 1),
         )
         return model    
         
@@ -118,7 +118,7 @@ class BayesianPredictor(nn.Module):
             BayesLinear(self.classifier_config['cls_dim'], self.classifier_config['cls_dim'], self.classifier_config['prior_pi'], self.classifier_config['prior_sigma1'], self.classifier_config['prior_sigma2']),
             nn.LayerNorm(self.classifier_config['cls_dim']),
             nn.ReLU(),
-            BayesLinear(self.classifier_config['cls_dim'], self.classifier_config['n_classes'], self.classifier_config['prior_pi'], self.classifier_config['prior_sigma1'], self.classifier_config['prior_sigma2']),
+            BayesLinear(self.classifier_config['cls_dim'], 1, self.classifier_config['prior_pi'], self.classifier_config['prior_sigma1'], self.classifier_config['prior_sigma2']),
         )
         return model    
         
@@ -163,7 +163,7 @@ class BayesianPredictor(nn.Module):
         
         with torch.no_grad():
             h = self.encode(x)
-            outputs = torch.zeros((h.size()[0], 2), device = self.device)
+            outputs = torch.zeros((h.size()[0], 1), device = self.device)
             
             for idx in range(h.size()[0]):
                 outputs[idx, :] = self.classifier(h[idx, :].unsqueeze(0))

@@ -1,7 +1,7 @@
 import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.data import Dataset
-import os, random
+import os, random, pickle
 import pandas as pd
 import numpy as np
 from typing import Optional, List, Literal, Union, Tuple, Dict
@@ -72,11 +72,16 @@ def preparing_0D_dataset(
     data_ece = pd.read_csv(filepath['ece']) if filepath['ece'].split(".")[-1] == "csv" else pd.read_pickle(filepath['ece'])
     data_diag = pd.read_csv(filepath['diag']) if filepath['diag'].split(".")[-1] == "csv" else pd.read_pickle(filepath['diag'])
     
+    # year selection: 2019,2020, 2021, 2022
+    data_disrupt = data_disrupt[data_disrupt.Year.astype(int).isin([2019,2020,2021,2022])]
+    
     # train / valid / test data split
     ori_shot_list = np.unique(data_disrupt.shot.values)
     
     if test_shot is not None:
         shot_list = np.array([shot for shot in ori_shot_list if int(shot) != test_shot])
+    else:
+        shot_list = ori_shot_list
 
     # stochastic train_test_split
     if random_state is not None:
@@ -130,7 +135,7 @@ def preparing_0D_dataset(
         scaler = None
     
     if scaler is not None:
-        for key in scaler.keys():
+        for key in scaler.keys(): 
             scaler[key].fit(train[key][config.COLUMN_NAME_SCALER[key]])
             
     if is_split:
@@ -155,6 +160,7 @@ class MultiSignalDataset(Dataset):
         seq_len_efit:int = 20, 
         seq_len_ece:int = 100,
         seq_len_diag:int = 100, 
+        dist_warning:int = 400,
         dist:int = 4,
         dt:float = 0.01, 
         scaler_efit=None,
@@ -176,6 +182,7 @@ class MultiSignalDataset(Dataset):
         self.dt = dt
     
         # prediction task
+        self.dist_warning = dist_warning
         self.dist = dist
         self.mode = mode
         
@@ -252,8 +259,8 @@ class MultiSignalDataset(Dataset):
                     idx_diag += 1
                         
                 elif self.dt == 0.001:
-                    idx_ece += 5
-                    idx_diag += 5
+                    idx_ece += 10
+                    idx_diag += 10
                     
             elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) * 2.0 and t_ece <= t_disrupt - self.dt * self.seq_len_ece:
                 indx_ece = self.data_ece.index.values[idx_ece]
@@ -294,8 +301,8 @@ class MultiSignalDataset(Dataset):
                     idx_diag += 1
                         
                 elif self.dt == 0.001:
-                    idx_ece += 5
-                    idx_diag += 5
+                    idx_ece += 10
+                    idx_diag += 10
                 
             elif t_ece > t_max - self.dt * (self.seq_len_ece + self.dist) * 1.25:
                 break
@@ -306,19 +313,19 @@ class MultiSignalDataset(Dataset):
                     idx_diag += 1
                         
                 elif self.dt == 0.001:
-                    idx_ece += 5
-                    idx_diag += 5
+                    idx_ece += 10
+                    idx_diag += 10
                 
     def preprocessing(self):
         
         if self.scaler_efit is not None:
-            self.data_efit[config.EFIT + config.EFIT_FE] = self.scaler_efit.transform(self.data_efit[config.EFIT + config.EFIT_FE])
+            self.data_efit.loc[:,config.EFIT + config.EFIT_FE] = self.scaler_efit.transform(self.data_efit[config.EFIT + config.EFIT_FE].values)
             
         if self.scaler_ece is not None:
-            self.data_ece[config.ECE] = self.scaler_ece.transform(self.data_ece[config.ECE])
+            self.data_ece.loc[:,config.ECE] = self.scaler_ece.transform(self.data_ece[config.ECE].values)
         
         if self.scaler_diag is not None:
-            self.data_diag[config.DIAG + config.DIAG_FE] = self.scaler_diag.transform(self.data_diag[config.DIAG + config.DIAG_FE])
+            self.data_diag.loc[:,config.DIAG + config.DIAG_FE] = self.scaler_diag.transform(self.data_diag[config.DIAG + config.DIAG_FE].values)
             
         print("# Inference | preprocessing the data")
         
@@ -470,22 +477,27 @@ def plot_shot_info(
         plt.savefig(pathname, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
     return fig
 
-def plot_disrupt_prob(probs:Union[np.array, List], time_slice:Union[np.array, List], tftsrt, t_tq, t_cq, save_dir:str, t_pred:Optional[float] = 0.04):
+def plot_disrupt_prob(probs:Union[np.array, List], time_slice:Union[np.array, List], tftsrt, t_tq, t_cq, save_dir:str, t_pred:Optional[float] = 0.04, dt_warning: Optional[float] = 0.4, shot_num : Optional[int] = None):
     
     threshold_line = [0.5] * len(time_slice)
     
     fig, axes = plt.subplots(1,2, figsize = (14, 5))
+    if shot_num:
+        fig.suptitle("Disruption prediction with shot : {}".format(int(shot_num)))
     axes = axes.ravel()
     
     # plot general case
     axes[0].plot(time_slice, probs, 'b', label = 'disrupt prob')
     axes[0].plot(time_slice, threshold_line, 'k', label = "threshold(p = 0.5)")
-    axes[0].axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed", label = "flattop (t={:.3f})".format(tftsrt))
+    axes[0].axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed", label = "Flattop (t={:.3f})".format(tftsrt))
     axes[0].axvline(x = t_tq, ymin = 0, ymax = 1, color = "red", linestyle = "dashed", label = "TQ (t={:.3f})".format(t_tq))
     axes[0].axvline(x = t_cq, ymin = 0, ymax = 1, color = "green", linestyle = "dashed", label = "CQ (t={:.3f})".format(t_cq))
     
     if t_pred:
-        t_warning = t_tq - t_pred
+        t_minimum = t_tq - t_pred
+        t_warning = t_tq - dt_warning
+        
+        axes[0].axvline(x = t_minimum, ymin = 0, ymax = 1, color = "blue", linestyle = "dashed", label = "Disruptive (t={:.3f})".format(t_minimum))
         axes[0].axvline(x = t_warning, ymin = 0, ymax = 1, color = "yellow", linestyle = "dashed", label = "Warning (t={:.3f})".format(t_warning))
         
     axes[0].set_ylabel("probability")
@@ -501,27 +513,36 @@ def plot_disrupt_prob(probs:Union[np.array, List], time_slice:Union[np.array, Li
     axes[1].axvline(x = t_cq, ymin = 0, ymax = 1, color = "green", linestyle = "dashed", label = "CQ (t={:.3f})".format(t_cq))
     
     if t_pred:
-        t_warning = t_tq - t_pred
-        axes[1].axvline(x = t_warning, ymin = 0, ymax = 1, color = "yellow", linestyle = "dashed", label = "Warning (t={:.3f})".format(t_warning))
+        t_minimum = t_tq - t_pred
+        t_warning = t_tq - dt_warning
         
+        axes[1].axvline(x = t_minimum, ymin = 0, ymax = 1, color = "blue", linestyle = "dashed", label = "Disruptive (t={:.3f})".format(t_minimum))
+        axes[1].axvline(x = t_warning, ymin = 0, ymax = 1, color = "yellow", linestyle = "dashed", label = "Warning (t={:.3f})".format(t_warning))
+     
     axes[1].set_ylabel("probability")
     axes[1].set_xlabel("time(unit:s)")   
     axes[1].legend(loc = 'upper left', facecolor = 'white', framealpha=1)
     axes[1].set_ylim([0,1])
-    axes[1].set_xlim([t_tq - 0.1, t_cq + 0.05])
+    
+    if t_pred:
+        axes[1].set_xlim([t_warning - 0.25, t_cq + 0.05])
+    else:
+        axes[1].set_xlim([t_tq - 0.1, t_cq + 0.05])
     
     fig.tight_layout()
     
     if save_dir:
-        pathname = os.path.join(save_dir, "disruption_probability_curve.png")
+        pathname = os.path.join(save_dir, "disruption_probability_curve_shot_{}.png".format(int(shot_num)))  
         plt.savefig(pathname, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
     
     return fig
 
-def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[np.array, List], aus : np.ndarray, eus:np.ndarray, tftsrt, t_tq, t_cq, save_dir:str, t_pred:Optional[float] = 0.04):
+def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[np.array, List], aus : np.ndarray, eus:np.ndarray, tftsrt, t_tq, t_cq, save_dir:str, t_pred:Optional[float] = 0.04, dt_warning:Optional[float] = 0.4, shot_num : Optional[int] = None):
     threshold_line = [0.5] * len(time_slice)
     
     fig, axes = plt.subplots(1,2, figsize = (14, 5))
+    if shot_num:
+        fig.suptitle("Disruption prediction with shot : {}".format(int(shot_num)))
     axes = axes.ravel()
 
     # plot zoom-in case
@@ -531,34 +552,48 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
     axes[0].axvline(x = t_cq, ymin = 0, ymax = 1, color = "green", linestyle = "dashed", label = "CQ (t={:.3f})".format(t_cq))
     
     if t_pred:
-        t_warning = t_tq - t_pred
-        axes[0].axvline(x = t_warning, ymin = 0, ymax = 1, color = "yellow", linestyle = "dashed", label = "Warning (t={:.3f})".format(t_warning))
+        t_minimum = t_tq - t_pred
+        t_warning = t_tq - dt_warning
         
+        axes[0].axvline(x = t_minimum, ymin = 0, ymax = 1, color = "blue", linestyle = "dashed", label = "Disruptive (t={:.3f})".format(t_minimum))
+        axes[0].axvline(x = t_warning, ymin = 0, ymax = 1, color = "yellow", linestyle = "dashed", label = "Warning (t={:.3f})".format(t_warning))
+            
     axes[0].set_ylabel("probability")
     axes[0].set_xlabel("time(unit:s)")   
     axes[0].legend(loc = 'upper left', facecolor = 'white', framealpha=1)
     axes[0].set_ylim([0,1])
-    axes[0].set_xlim([t_tq - 0.1, t_cq + 0.05])
+    
+    if t_pred:
+        axes[0].set_xlim([t_warning - 0.25, t_cq + 0.05])
+    else:
+        axes[0].set_xlim([t_tq - 0.1, t_cq + 0.05])
     
     # plot uncertainty
-    axes[1].plot(time_slice, aus[:,0], 'b', label = 'aleatoric uncertainty')
+    axes[1].plot(time_slice, aus, 'b', label = 'aleatoric uncertainty')
     axes[1].axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed", label = "flattop (t={:.3f})".format(tftsrt))
     axes[1].axvline(x = t_tq, ymin = 0, ymax = 1, color = "red", linestyle = "dashed", label = "TQ (t={:.3f})".format(t_tq))
     axes[1].axvline(x = t_cq, ymin = 0, ymax = 1, color = "green", linestyle = "dashed", label = "CQ (t={:.3f})".format(t_cq))
-    axes[1].set_xlim([t_tq - 0.1, t_cq + 0.05])
+    
+    if t_pred:
+        axes[1].axvline(x = t_minimum, ymin = 0, ymax = 1, color = "blue", linestyle = "dashed", label = "Disruptive (t={:.3f})".format(t_minimum))
+        axes[1].axvline(x = t_warning, ymin = 0, ymax = 1, color = "yellow", linestyle = "dashed", label = "Warning (t={:.3f})".format(t_warning))
+        # axes[1].set_xlim([t_warning - 0.25, t_cq + 0.05])
+    else:
+        axes[1].set_xlim([t_tq - 0.1, t_cq + 0.05])
+   
     axes[1].tick_params(axis = 'y', labelcolor = 'b')
     axes[1].set_xlabel("time(unit:s)")
     axes[1].set_ylabel("Aleatoric uncertainty")
     
     axes_ = axes[1].twinx()
-    axes_.plot(time_slice, eus[:,0], 'r', label = 'epistemic uncertainty')
+    axes_.plot(time_slice, eus, 'r', label = 'epistemic uncertainty')
     axes_.tick_params(axis = 'y', labelcolor = 'r')
     axes_.set_ylabel("Epistemic uncertainty")
     
     fig.tight_layout()
     
     if save_dir:
-        pathname = os.path.join(save_dir, "disruption_prob_uncertainty.png")
+        pathname = os.path.join(save_dir, "disruption_prob_uncertainty_shot_{}.png".format(int(shot_num)))
         plt.savefig(pathname, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
         
     return fig
@@ -575,7 +610,7 @@ def plot_disrupt_prob_causes(feature_dict : Dict, shot_num : int, dt : float, di
                 feature_importance[key] = feature_dict[key][idx]
         
         fig,ax = plt.subplots(1,1,figsize = (8, 8))
-        fig.suptitle("Feature importance for predicting disruptions at shot :{}".format(shot_num))
+        fig.suptitle("Feature importance for predicting disruptions at shot :{}".format(int(shot_num)))
         
         ax.barh(list(feature_importance.keys()), list(feature_importance.values()))
         ax.set_yticks([i for i in range(len(list(feature_importance.keys())))], labels = list(feature_importance.keys()))
@@ -587,7 +622,11 @@ def plot_disrupt_prob_causes(feature_dict : Dict, shot_num : int, dt : float, di
         
         if save_dir:
             pred_time = "{:02d}ms".format(int(feature_dict['time'][idx] * 1000))
-            pathname = os.path.join(save_dir, "feature_importance_TQ_{}.png".format(pred_time))
+            
+            if pred_time not in ['05ms','10ms','15ms','20ms','25ms','30ms','35ms','40ms']:
+                continue
+            
+            pathname = os.path.join(save_dir, "feature_importance_TQ_{}_shot_{}.png".format(pred_time, int(shot_num)))
             plt.savefig(pathname, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
     
     # plot the feature importance along time
@@ -600,16 +639,25 @@ def plot_disrupt_prob_causes(feature_dict : Dict, shot_num : int, dt : float, di
         if key != 'time':
             feature_importance[key] = feature_dict[key]
     
+    time_slice = []
+    
     for idx, t in enumerate(feature_dict['time']):
+        
+        if int(t * 1000) not in [5,10,15,20,25,30,35,40]:
+            continue
+        
+        time_slice.append(t)
+        
         hist = [feature_importance[key][idx] for key in feature_importance.keys()]
         ax.bar(list(feature_importance.keys()), hist, zs = t, zdir = 'y', alpha = 0.8, in_layout = True)
     
     ax.set_xticks([i for i in range(len(list(feature_importance.keys())))], labels = list(feature_importance.keys()), rotation = 90, fontsize = 8)
     
     if dt == 0.01:
-        ax.set_yticks(ticks = feature_dict['time'], labels = ["{:02d} ms".format(int(i * dt * 1000)) for i in reversed(range(1, dist + 1))])
+        ax.set_yticks(ticks = time_slice, labels = ["{:02d} ms".format(int(t * 1000)) for i in time_slice])
+        
     elif dt == 0.001:
-        ax.set_yticks(ticks = feature_dict['time'], labels = ["{:02d} ms".format(int(t * 1000)) for t in reversed(feature_dict['time'])])
+        ax.set_yticks(ticks = time_slice, labels = ["{:02d} ms".format(int(t * 1000)) for t in time_slice])
         
     ax.set_zlabel('Feature importance')
     ax.set_ylabel('$t_{pred}$ before TQ (unit:ms)')
@@ -618,7 +666,7 @@ def plot_disrupt_prob_causes(feature_dict : Dict, shot_num : int, dt : float, di
     fig.tight_layout()
 
     if save_dir:
-        pathname = os.path.join(save_dir, "feature_importance.png")
+        pathname = os.path.join(save_dir, "feature_importance_shot_{}.png".format(int(shot_num)))
         plt.savefig(pathname, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
         
     return fig
@@ -632,6 +680,7 @@ def generate_model_performance(
         seq_len_efit:int = 20, 
         seq_len_ece:int = 100,
         seq_len_diag:int = 100, 
+        dist_warning:Optional[int] = None,
         dist : Optional[int] = None,
         dt : Optional[float] = None,
         mode : Literal['TQ', 'CQ'] = 'CQ', 
@@ -673,6 +722,7 @@ def generate_model_performance(
         seq_len_efit,
         seq_len_ece,
         seq_len_diag,
+        dist_warning,
         dist,
         dt,
         scaler_list['efit'],
@@ -682,7 +732,6 @@ def generate_model_performance(
     )
 
     prob_list = []
-    is_disruption = []
     feature_dict = None
     aus = []
     eus = []
@@ -700,26 +749,22 @@ def generate_model_performance(
             
         if is_plot_feature_importance:
             output = model(data)
-            probs = torch.nn.functional.softmax(output, dim = 1)[:,0]
+            probs = torch.nn.functional.sigmoid(output)[0]
             probs = probs.cpu().detach().numpy().tolist()
         else:
             with torch.no_grad():
                 output = model(data)
-                probs = torch.nn.functional.softmax(output, dim = 1)[:,0]
+                probs = torch.nn.functional.sigmoid(output)[0]
                 probs = probs.cpu().detach().numpy().tolist()
 
         prob_list.extend(
             probs
         )
         
-        is_disruption.extend(
-            torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1].cpu().detach().numpy().tolist()
-        )
-        
         if is_plot_uncertainty:
-            au, eu = compute_uncertainty_per_data(model, data, device = device, n_samples = 32, normalized = False)
-            aus.append(au)
-            eus.append(eu)
+            au, eu = compute_uncertainty_per_data(model, data, device = device, n_samples = 16)
+            aus.append(au[0])
+            eus.append(eu[0])
             
         t = dataset.time_slice[idx]
         
@@ -738,12 +783,15 @@ def generate_model_performance(
                 for key in feat.keys():
                     feature_dict[key].append(feat[key])
     
-    # breakpoint()
     n_ftsrt = int(dataset.time_slice[0] // dt)
     time_slice = np.linspace(0, dataset.time_slice[0] - dt, n_ftsrt).tolist() + [v for v in dataset.time_slice] 
     probs = np.array([0] * n_ftsrt + prob_list)
     probs = moving_avarage_smoothing(probs, 12, 'center')
     
+    if is_plot_uncertainty:
+        aus = np.array([0] * n_ftsrt + aus)
+        eus = np.array([0] * n_ftsrt + eus)
+        
     print("time_slice : ", len(time_slice))
     print("prob_list : ", len(probs))
     print("\n(Info) flat-top : {:.3f}(s) | thermal quench : {:.3f}(s) | current quench : {:.3f}(s)\n".format(tftsrt, tTQend, tipminf))
@@ -755,12 +803,12 @@ def generate_model_performance(
         fig_shot = None
     
     # plot disrupt prob
-    fig_dis = plot_disrupt_prob(probs, time_slice, tftsrt, t_disrupt, t_current, save_dir, dt * dist)
+    fig_dis = plot_disrupt_prob(probs, time_slice, tftsrt, t_disrupt, t_current, save_dir, dt * dist, dt * dist_warning, shot_num)
     
-    if is_plot_uncertainty:
-        aus = np.array(aus).reshape(-1,2)
-        eus = np.array(eus).reshape(-1,2)
-        fig_uc = plot_disrupt_prob_uncertainty(probs, time_slice, aus, eus, tftsrt, t_disrupt, t_current, save_dir, dt * dist)
+    if is_plot_uncertainty:        
+        aus = np.array(aus).reshape(-1,1)
+        eus = np.array(eus).reshape(-1,1)
+        fig_uc = plot_disrupt_prob_uncertainty(probs, time_slice, aus, eus, tftsrt, t_disrupt, t_current, save_dir, dt * dist, dt * dist_warning, shot_num)
     else:
         fig_uc = None
     

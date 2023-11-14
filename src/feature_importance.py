@@ -53,7 +53,10 @@ def compute_loss(
             loss = loss_fn(output, target.to(device))
     
             total_loss += loss.item()
-            pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
+            # pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
+            pred = torch.nn.functional.sigmoid(output)
+            pred = torch.where(pred > 0.5, 1, 0)
+            
             total_size += pred.size(0)
 
             total_pred = np.concatenate((total_pred, pred.cpu().numpy().reshape(-1,)))
@@ -134,14 +137,7 @@ def calculate_outputs_and_gradients(inputs:torch.Tensor, model:nn.Module, target
     
     for input in inputs:
         output = model(input)
-        output = torch.nn.functional.softmax(output, dim = 1)
-        
-        if target_label_idx is None:
-            target_label_idx = torch.argmax(output, 1).item()
-        
-        index = torch.ones((output.size()[0], 1), dtype = torch.int64) * target_label_idx
-        
-        output = output.gather(1, index.to(device))
+        output = torch.nn.functional.sigmoid(output)
         
         model.zero_grad()
         output.backward()

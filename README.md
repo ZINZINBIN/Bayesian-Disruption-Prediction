@@ -15,8 +15,61 @@
     <img src="/image/IMAGE_02.PNG"  width="640" height="320">
 </div>
 <div>
-    Now, Computation of the uncertainties including aleatoric and epistemic uncertainty can be computed since it was already covered in the paper (Kumar Shridhar et al. 2019). Based on this approach, we utilize these uncertainties to enhance the precision of disruption prediction models. 
+    Now, computation of the uncertainties including aleatoric and epistemic uncertainty can be computed since it was already covered in the paper (Kumar Shridhar et al. 2019). Based on this approach, we utilize these uncertainties to enhance the precision of disruption prediction models. 
 </div>
+
+## How to run
+<div>
+    There are mainly three different types of codes in this repository: (1) train (2) test (3) optimize. The codes starting with 'train' are used for training the disruption predictors without other post-hoc methods. Those starting with 'test' are used for evaluating the model performance including the quantitive metrics and qualitive evaluation such as t-SNE and continuous disruption prediction. Lastly, 'optimize' codes are used for tunning the hyperparameters of models or post-hoc parameters. The details of setting the arguments while excecuting codes are as below.
+</div>
+
+### Train disruption predictors
+- training a non-bayesian disruption predictor
+    ```
+    python3 train_model.py
+    ```
+
+- training a Bayesian disruption predictor
+    ```
+    python3 train_bayes_model.py
+    ```
+
+### Evaluate disruption predictors
+- Evaluating a non-bayesian disruption predictor: qualitive metric(F1,Pre,Rec), t-SNE visualization, continuous disruption prediction
+    ```
+    python3 test_model.py
+    ```
+
+- Evaluating a Bayesian disruption predictor: qualitive metric(F1,Pre,Rec), t-SNE visualization, continuous disruption prediction
+    ```
+    python3 test_bayes_model.py
+    ```
+
+- Evaluating uncertainty: visualized probaility distribution, tables of test prediction and uncertainty
+    ```
+    python3 test_uncertainty.py
+    ```
+
+- Evaluating feature importance: visualized feature importance during disruptive phase , tables of test prediction and feature importance
+    ```
+    python3 test_feature_importance.py
+    ```
+
+- Evaluating disruption predictions for test shots: visualized disruption predictions for test shots
+    ```
+    python3 test_disruption_prediction.py
+    ```
+
+### Optimize hyper-parameters for enhancement
+- Optimizing the hyperparameters of model configuration
+    ```
+    python3 optiminze_hyperparameter.py
+    ```
+
+- Optimizing temperature scaling for calibration
+    ```
+    python3 optimize_calibration.py
+    ```
 
 ## The model performance of disruption prediction
 <div>

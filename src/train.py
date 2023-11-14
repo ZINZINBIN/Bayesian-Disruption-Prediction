@@ -57,13 +57,15 @@ def train_per_epoch(
         optimizer.step()
 
         train_loss += loss.item()
-
-        pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
+        
+        # pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
+        pred = torch.nn.functional.sigmoid(output)
+        pred = torch.where(pred > 0.5, 1, 0)
         train_acc += pred.eq(data['label'].to(device).view_as(pred)).sum().item()
         total_size += pred.size(0) 
         
         total_pred.append(pred.view(-1,1))
-        total_label.append(data['label'].view(-1,1))
+        total_label.append(torch.where(data['label'] > 0, 1, 0).view(-1,1))
         
     if scheduler:
         scheduler.step()
@@ -110,12 +112,15 @@ def valid_per_epoch(
             loss = loss_fn(output, data['label'].to(device))
     
             valid_loss += loss.item()
-            pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
+            # pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
+            pred = torch.nn.functional.sigmoid(output)
+            pred = torch.where(pred > 0.5, 1, 0)
+            
             valid_acc += pred.eq(data['label'].to(device).view_as(pred)).sum().item()
             total_size += pred.size(0)
 
             total_pred.append(pred.view(-1,1))
-            total_label.append(data['label'].view(-1,1))
+            total_label.append(torch.where(data['label'] > 0, 1, 0).view(-1,1))
 
     total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
     total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
@@ -224,9 +229,9 @@ def train(
                     
                     # General metrics for checking the precision and recall of the model
                     model.eval()
-                    fig = evaluate_tensorboard(test_for_check_per_epoch, model, optimizer, loss_fn, device, 0.5)
+                    fig = evaluate_tensorboard(test_for_check_per_epoch, model, loss_fn, device, 0.5)
                     writer.add_figure('Model-performance', fig, epoch)
-                    
+                     
                     # Checking the performance for continuous disruption prediciton 
                     _, _, fig_dis, _, fig_fi, _ = generate_model_performance(
                         filepath = config.filepath,
@@ -237,18 +242,22 @@ def train(
                         seq_len_efit = test_for_check_per_epoch.dataset.seq_len_efit, 
                         seq_len_ece = test_for_check_per_epoch.dataset.seq_len_ece,
                         seq_len_diag = test_for_check_per_epoch.dataset.seq_len_diag, 
+                        dist_warning=test_for_check_per_epoch.dataset.dist_warning,
                         dist = test_for_check_per_epoch.dataset.dist,
                         dt = dt,
                         mode = test_for_check_per_epoch.dataset.mode,
                         scaler_type=scaler_type,
                         is_plot_shot_info=False,
                         is_plot_uncertainty=False,
-                        is_plot_feature_importance=True
+                        is_plot_feature_importance=False
                     )
                     
                     model.train()
-                    writer.add_figure('Continuous disruption prediction', fig_dis, epoch)
-                    writer.add_figure('Feature importance', fig_fi, epoch)
+                    
+                    if fig_dis:
+                        writer.add_figure('Continuous disruption prediction', fig_dis, epoch)
+                    if fig_fi:
+                        writer.add_figure('Feature importance', fig_fi, epoch)
                     
         # save the last parameters
         torch.save(model.state_dict(), save_last_dir)

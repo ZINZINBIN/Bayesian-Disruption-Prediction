@@ -10,7 +10,7 @@ class Config():
             "efit":"./dataset/Bayesian_Disruption_efit.pkl",
             "ece":"./dataset/Bayesian_Disruption_ece.pkl",
             "diag":"./dataset/Bayesian_Disruption_diag.pkl",
-            "disrupt":'./dataset/Bayesian_Disruption_Shot_List.csv'
+            "disrupt":'./dataset/Bayesian_Disruption_Shot_List.csv',
       }
       
       # EFIT

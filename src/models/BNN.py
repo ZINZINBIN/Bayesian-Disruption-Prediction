@@ -178,10 +178,8 @@ def compute_ensemble_probability(model : nn.Module, input : Dict[str, torch.Tens
         Input : (1,T,D)
         Output : (n_samples, 2) : n_samples of [probs_normal, probs_disrupt]
     '''
-
     model.eval()
     model.to(device)
-    
     
     # 배치 단위로 불확실성 계산하는 코드 : 추후 추가 예정
     input_n_repeat = {}
@@ -191,12 +189,13 @@ def compute_ensemble_probability(model : nn.Module, input : Dict[str, torch.Tens
         input_n_repeat[key] = input[key].repeat(n_samples, 1, 1)
         
     outputs = model.predict_per_sample(input_n_repeat)
-    probs = torch.nn.functional.softmax(outputs, dim = 1)
+    probs = torch.nn.functional.sigmoid(outputs)
+    
     probs = probs.detach().cpu().numpy() 
     
     return probs
 
-def compute_uncertainty_per_data(model : nn.Module, input : Dict[str, torch.Tensor], device : str = "cpu", n_samples : int = 8, normalized : bool = False):
+def compute_uncertainty_per_data(model : nn.Module, input : Dict[str, torch.Tensor], device : str = "cpu", n_samples : int = 8):
     
     model.eval()
     model.to(device)
@@ -208,14 +207,8 @@ def compute_uncertainty_per_data(model : nn.Module, input : Dict[str, torch.Tens
         input_n_repeat[key] = input[key].repeat(n_samples, 1, 1)
         
     outputs = model.predict_per_sample(input_n_repeat)
-    probs = torch.nn.functional.softmax(outputs, dim = 1)
-    
-    if normalized:
-        probs = torch.nn.functional.softmax(outputs, dim = 1)
-        probs = probs / torch.sum(probs, dim = 1).unsqueeze(1)
-    else:
-        probs = torch.nn.functional.softmax(outputs, dim = 1)
-        
+    probs = torch.nn.functional.sigmoid(outputs)
+            
     probs = probs.detach().cpu().numpy()   
     probs_mean = np.mean(probs, axis = 0)
     probs_diff = probs - np.expand_dims(probs_mean, 0)

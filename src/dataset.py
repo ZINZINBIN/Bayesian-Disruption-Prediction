@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
-import torch, os
+import torch, os, math
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from typing import Literal
+from typing import Literal, Optional
 from src.config import Config
 
 config = Config()
@@ -18,13 +18,14 @@ class MultiSignalDataset(Dataset):
         seq_len_efit:int = 20, 
         seq_len_ece:int = 100,
         seq_len_diag:int = 100, 
-        dist:int = 4,
+        dist:int = 40,
         dt:float = 0.01, 
         scaler_efit=None,
         scaler_ece=None,
         scaler_diag=None, 
         mode : Literal['TQ', 'CQ'] = 'CQ', 
-        task : Literal['train', 'valid','test','eval'] = 'train'
+        task : Literal['train','valid','test','eval'] = 'train',
+        dist_warning:int = 400,
         ):
         
         # KSTAR dataset
@@ -41,6 +42,7 @@ class MultiSignalDataset(Dataset):
     
         # prediction task
         self.dist = dist
+        self.dist_warning = dist_warning
         self.mode = mode
         self.task = task
         
@@ -82,14 +84,15 @@ class MultiSignalDataset(Dataset):
         print("# {} | initialize experimental shot | # of shots : {}".format(self.task, len(self.shot_list)))
         
     def preprocessing(self):
+    
         if self.scaler_efit is not None:
-            self.data_efit[config.EFIT + config.EFIT_FE] = self.scaler_efit.transform(self.data_efit[config.EFIT + config.EFIT_FE])
+            self.data_efit.loc[:,config.EFIT + config.EFIT_FE] = self.scaler_efit.transform(self.data_efit[config.EFIT + config.EFIT_FE].values)
             
         if self.scaler_ece is not None:
-            self.data_ece[config.ECE] = self.scaler_ece.transform(self.data_ece[config.ECE])
+            self.data_ece.loc[:,config.ECE] = self.scaler_ece.transform(self.data_ece[config.ECE].values)
         
         if self.scaler_diag is not None:
-            self.data_diag[config.DIAG + config.DIAG_FE] = self.scaler_diag.transform(self.data_diag[config.DIAG + config.DIAG_FE])
+            self.data_diag.loc[:,config.DIAG + config.DIAG_FE] = self.scaler_diag.transform(self.data_diag[config.DIAG + config.DIAG_FE].values)
             
         print("# {} | preprocessing the data".format(self.task))
     
@@ -111,6 +114,7 @@ class MultiSignalDataset(Dataset):
             
             indices = []
             labels = []
+            dists = []
             
             if self.dt == 0.01:
                 idx_efit = int(tftsrt / self.dt) // 5
@@ -145,39 +149,7 @@ class MultiSignalDataset(Dataset):
                     t_diff = t_ece - t_efit
                     idx_efit += int(round(t_diff / self.dt / ratio, 1))
                 
-                if t_ece >= tftsrt and t_ece < t_disrupt - self.dt * (2.0 * self.seq_len_ece + self.dist):
-                    indx_ece = df_ece_shot.index.values[idx_ece]
-                    indx_efit = df_efit_shot.index.values[idx_efit]
-                    indx_diag = df_diag_shot.index.values[idx_diag]
-                    
-                    indices.append((indx_efit, indx_ece, indx_diag))
-                    labels.append(1)
-                    
-                    if self.dt == 0.01:
-                        idx_ece += self.seq_len_ece // 10
-                        idx_diag += self.seq_len_diag // 10
-                        
-                    elif self.dt == 0.001:
-                        idx_ece += self.seq_len_ece // 10
-                        idx_diag += self.seq_len_diag // 10
-                    
-                elif t_ece >=  t_disrupt - self.dt * (2.0 * self.seq_len_ece + self.dist) and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist):
-                    indx_ece = df_ece_shot.index.values[idx_ece]
-                    indx_efit = df_efit_shot.index.values[idx_efit]
-                    indx_diag = df_diag_shot.index.values[idx_diag]
-                    
-                    indices.append((indx_efit, indx_ece, indx_diag))
-                    labels.append(1)
-                    
-                    if self.dt == 0.01:
-                        idx_ece += 1
-                        idx_diag += 1
-                        
-                    elif self.dt == 0.001:
-                        idx_ece += 5
-                        idx_diag += 5
-                
-                elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= tipminf - self.dt * self.seq_len_ece + self.dt * 2:
+                if t_ece >= tftsrt and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist_warning):
                     indx_ece = df_ece_shot.index.values[idx_ece]
                     indx_efit = df_efit_shot.index.values[idx_efit]
                     indx_diag = df_diag_shot.index.values[idx_diag]
@@ -185,13 +157,76 @@ class MultiSignalDataset(Dataset):
                     indices.append((indx_efit, indx_ece, indx_diag))
                     labels.append(0)
                     
+                    pred_time = t_disrupt - t_ece - self.dt * self.seq_len_ece
+                    dists.append(pred_time)
+                    
+                    if self.dt == 0.01:
+                        idx_ece += self.seq_len_ece // 10
+                        idx_diag += self.seq_len_diag // 10
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += self.seq_len_ece // 50
+                        idx_diag += self.seq_len_diag // 50
+                    
+                elif t_ece >=  t_disrupt - self.dt * (self.seq_len_ece + self.dist_warning) and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist):
+                    indx_ece = df_ece_shot.index.values[idx_ece]
+                    indx_efit = df_efit_shot.index.values[idx_efit]
+                    indx_diag = df_diag_shot.index.values[idx_diag]
+                    
+                    indices.append((indx_efit, indx_ece, indx_diag))
+                    
+                    pred_time = t_disrupt - t_ece - self.dt * self.seq_len_ece
+                    dists.append(pred_time)
+                    
+                    delta = (self.dist_warning - self.dist + 1) * self.dt
+                    
+                    # exponantial smoothing
+                    delta_t = t_ece - t_disrupt + self.dt * (self.seq_len_ece + self.dist_warning)
+                    gamma = 2.0
+                    alpha = (1 - math.exp(- gamma * delta_t / delta)) / (1-math.exp(-gamma))
+            
+                    # eliptical smoothing
+                    # delta_t = t_disrupt - self.dt * (self.seq_len_ece + self.dist) - t_ece
+                    # alpha = math.sqrt(1 - (delta_t / delta) ** 2)
+                    
+                    if alpha > 1:
+                        alpha = 1
+                        
+                    elif alpha < 0:
+                        alpha = 0
+                    
+                    if self.task == 'train':
+                        labels.append(alpha)
+                    else:
+                        labels.append(0)
+                    
                     if self.dt == 0.01:
                         idx_ece += 1
                         idx_diag += 1
                         
                     elif self.dt == 0.001:
-                        idx_ece += 5
-                        idx_diag += 5
+                        idx_ece += 1
+                        idx_diag += 1
+                
+                elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= tipminf - self.dt * self.seq_len_ece:
+                    indx_ece = df_ece_shot.index.values[idx_ece]
+                    indx_efit = df_efit_shot.index.values[idx_efit]
+                    indx_diag = df_diag_shot.index.values[idx_diag]
+                    
+                    indices.append((indx_efit, indx_ece, indx_diag))
+                    labels.append(1)
+                    
+                    pred_time = t_disrupt - t_ece - self.dt * self.seq_len_ece
+                    pred_time = pred_time if pred_time > 0 else 0
+                    dists.append(pred_time)
+                    
+                    if self.dt == 0.01:
+                        idx_ece += 1
+                        idx_diag += 1
+                        
+                    elif self.dt == 0.001:
+                        idx_ece += 1
+                        idx_diag += 1
                 
                 elif t_ece < tftsrt:                
                     if self.dt == 0.01:
@@ -217,9 +252,10 @@ class MultiSignalDataset(Dataset):
             self.shot_num.extend([shot for _ in range(len(indices))])
             self.indices.extend(indices)
             self.labels.extend(labels)
+            self.dist_list.extend(dists)
         
-        self.n_disrupt = np.sum(np.array(self.labels) == 0)
-        self.n_normal = np.sum(np.array(self.labels) == 1)
+        self.n_disrupt = np.sum(np.array(self.labels) == 1)
+        self.n_normal = np.sum(np.array(self.labels) == 0)
         
         print("# {} | disruptive : {} | normal : {}".format(self.task, self.n_disrupt, self.n_normal))     
     
@@ -290,14 +326,20 @@ class MultiSignalDataset(Dataset):
                     indx_ece = df_ece_shot.index.values[idx_ece]
                     indx_efit = df_efit_shot.index.values[idx_efit]
                     indx_diag = df_diag_shot.index.values[idx_diag]
+                    
+                    indices.append((indx_efit, indx_ece, indx_diag))
+                    labels.append(0)
+                    
+                    pred_time = t_disrupt - t_ece - self.dt * self.seq_len_ece
+                    dists.append(pred_time)
         
                     if self.dt == 0.01:
-                        idx_ece += self.seq_len_ece // 10
-                        idx_diag += self.seq_len_diag // 10
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
                         
                     elif self.dt == 0.001:
-                        idx_ece += self.seq_len_ece // 10
-                        idx_diag += self.seq_len_diag // 10
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
                 
                 elif t_ece >=  t_disrupt - self.dt * (2.0 * self.seq_len_ece + self.dist) and t_ece < t_disrupt - self.dt * (self.seq_len_ece + self.dist):
                     indx_ece = df_ece_shot.index.values[idx_ece]
@@ -305,20 +347,20 @@ class MultiSignalDataset(Dataset):
                     indx_diag = df_diag_shot.index.values[idx_diag]
                     
                     if self.dt == 0.01:
-                        idx_ece += self.seq_len_ece // 10
-                        idx_diag += self.seq_len_diag // 10
+                        idx_ece += self.seq_len_ece // 50
+                        idx_diag += self.seq_len_diag // 50
                         
                     elif self.dt == 0.001:
-                        idx_ece += self.seq_len_ece // 10
-                        idx_diag += self.seq_len_diag // 10
+                        idx_ece += self.seq_len_ece // 100
+                        idx_diag += self.seq_len_diag // 100
                 
-                elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= tipminf - self.dt * self.seq_len_ece + 2 * self.dt:
+                elif t_ece >= t_disrupt - self.dt * (self.seq_len_ece + self.dist) and t_ece <= tipminf - self.dt * self.seq_len_ece:
                     indx_ece = df_ece_shot.index.values[idx_ece]
                     indx_efit = df_efit_shot.index.values[idx_efit]
                     indx_diag = df_diag_shot.index.values[idx_diag]
                     
                     indices.append((indx_efit, indx_ece, indx_diag))
-                    labels.append(0)
+                    labels.append(1)
                     
                     pred_time = t_disrupt - t_ece - self.dt * self.seq_len_ece
                     dists.append(pred_time)
@@ -338,8 +380,8 @@ class MultiSignalDataset(Dataset):
                         idx_diag += self.seq_len_diag // 5
                         
                     elif self.dt == 0.001:
-                        idx_ece += self.seq_len_ece // 50
-                        idx_diag += self.seq_len_diag // 50
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
                     
                 elif t_ece > t_disrupt:
                     break
@@ -350,8 +392,8 @@ class MultiSignalDataset(Dataset):
                         idx_diag += self.seq_len_diag // 5
                         
                     elif self.dt == 0.001:
-                        idx_ece += self.seq_len_ece // 50
-                        idx_diag += self.seq_len_diag // 50
+                        idx_ece += self.seq_len_ece // 5
+                        idx_diag += self.seq_len_diag // 5
             
             self.shot_num.extend([shot for _ in range(len(indices))])
             self.indices.extend(indices)
@@ -361,8 +403,7 @@ class MultiSignalDataset(Dataset):
     def __getitem__(self, idx : int):
         
         indx_efit, indx_ece, indx_diag = self.indices[idx]
-        label = self.labels[idx]
-        label = np.array(label)
+        label = np.array(self.labels[idx])
         
         data_efit = self.data_efit.loc[indx_efit + 1:indx_efit + self.seq_len_efit, config.EFIT + config.EFIT_FE].values.reshape(-1, self.seq_len_efit)
         data_ece = self.data_ece.loc[indx_ece + 1:indx_ece + self.seq_len_ece, config.ECE].values.reshape(-1, self.seq_len_ece)
@@ -371,50 +412,28 @@ class MultiSignalDataset(Dataset):
         data_efit = torch.from_numpy(data_efit).float()
         data_ece = torch.from_numpy(data_ece).float()
         data_diag = torch.from_numpy(data_diag).float()
-        label = torch.from_numpy(label)
+        label = torch.from_numpy(label).float()
         
-        if self.get_shot_num and self.task != 'eval':
-            shot_num = self.shot_num[idx]
-            data = {
-                "efit":data_efit,
-                "ece":data_ece,
-                "diag":data_diag,
-                "label":label,
-                "shot_num":shot_num
-            }
-            
-        elif self.task == 'eval':
-            shot_num = self.shot_num[idx]
-            dist = self.dist_list[idx]
-            data = {
-                "efit":data_efit,
-                "ece":data_ece,
-                "diag":data_diag,
-                "label":label,
-                "shot_num":shot_num,
-                'dist':dist
-            }
-            
-        else:
-            data = {
-                "efit":data_efit,
-                "ece":data_ece,
-                "diag":data_diag,
-                "label":label,
-            }
-        
+        shot_num = self.shot_num[idx]
+        dist = self.dist_list[idx]
+        data = {
+            "efit":data_efit,
+            "ece":data_ece,
+            "diag":data_diag,
+            "label":label,
+            "shot_num":shot_num,
+            'dist':dist
+        }
+  
         return data
     
     def __len__(self):
         return len(self.indices)
     
     def get_num_per_cls(self):
-        classes = np.unique(self.labels)
         self.num_per_cls_dict = dict()
-
-        for cls in classes:
-            num = np.sum(np.where(self.labels == cls, 1, 0))
-            self.num_per_cls_dict[cls] = num
+        self.num_per_cls_dict[1] = np.sum(np.where(self.labels == 1, 1, 0))
+        self.num_per_cls_dict[0] = len(self.labels) - self.num_per_cls_dict[1]
         
     def get_cls_num_list(self):
         cls_num_list = []
