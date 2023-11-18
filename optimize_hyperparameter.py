@@ -65,10 +65,12 @@ def parsing():
     # batch size / sequence length / epochs / distance / num workers / pin memory use
     parser.add_argument("--batch_size", type = int, default = 100)
     parser.add_argument("--num_epoch", type = int, default = 32)
-    parser.add_argument("--seq_len_efit", type = int, default = 10)
-    parser.add_argument("--seq_len_ece", type = int, default = 50)
-    parser.add_argument("--seq_len_diag", type = int, default = 50)
-    parser.add_argument("--dist", type = int, default = 4)
+    parser.add_argument("--seq_len_efit", type = int, default = 100)
+    parser.add_argument("--seq_len_ece", type = int, default = 1000)
+    parser.add_argument("--seq_len_diag", type = int, default = 1000)
+    parser.add_argument("--dist_warning", type = int, default = 100)
+    parser.add_argument("--dist", type = int, default = 40)
+    parser.add_argument("--dt", type = float, default = 0.001)
     parser.add_argument("--num_workers", type = int, default = 4)
     parser.add_argument("--pin_memory", type = bool, default = True)
     
@@ -177,7 +179,7 @@ if args['scaler'] == 'None':
 else:
     scale_type = args['scaler']
 
-tag = "{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
+tag = "{}_warning_{}_dist_{}_{}_{}_{}_{}_seed_{}".format(args["tag"], args['dist_warning'], args["dist"], loss_type, boost_type, scale_type, args['mode'], args['random_seed'])
 
 print("================= Running code =================")
 print("Hyper-parameter optimization setting : {}".format(tag))
@@ -193,9 +195,9 @@ if loaded_checkpoint:
 train_list, valid_list, test_list, scaler_list = preparing_0D_dataset(config.filepath, None, args['scaler'], args['test_shot_num'])
 
 print("================= Dataset information =================")
-train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train')
-valid_data = MultiSignalDataset(valid_list['disrupt'], valid_list['efit'], valid_list['ece'], valid_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'valid')
-test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], 0.01, scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test')
+train_data = MultiSignalDataset(train_list['disrupt'], train_list['efit'], train_list['ece'], train_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'train', args['dist_warning'])
+valid_data = MultiSignalDataset(valid_list['disrupt'], valid_list['efit'], valid_list['ece'], valid_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'valid', args['dist_warning'])
+test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test', args['dist_warning'])
 
 # label distribution for LDAM / Focal Loss
 train_data.get_num_per_cls()
@@ -251,7 +253,7 @@ def load_model(configuration:Dict, device : str):
                 "kernel_size":configuration['efit-kernel_size'],
                 "dropout":configuration['efit-dropout'],
                 "dilation_size":calc_dilation(configuration['efit-kernel_size'],configuration['efit-dilation_size'], configuration['efit-nlevel'], configuration['efit-nrecept']),
-                "seq_len":10
+                "seq_len":100
         },
         "ece":{
                 "num_inputs":len(config.ECE),
@@ -260,16 +262,16 @@ def load_model(configuration:Dict, device : str):
                 "kernel_size":configuration['ece-kernel_size'],
                 "dropout":configuration['ece-dropout'],
                 "dilation_size":calc_dilation(configuration['ece-kernel_size'],configuration['ece-dilation_size'], configuration['ece-nlevel'], configuration['ece-nrecept']),
-                "seq_len":50
+                "seq_len":1000
         },
         "diag":{
-                "num_inputs":len(config.DIAG),
+                "num_inputs":len(config.DIAG + config.DIAG_FE),
                 "hidden_dim":configuration['diag-hidden_dim'],
                 "num_channels":[configuration['diag-channels']] * configuration['diag-nlevel'],
                 "kernel_size":configuration['diag-kernel_size'],
                 "dropout":configuration['diag-dropout'],
                 "dilation_size":calc_dilation(configuration['diag-kernel_size'],configuration['diag-dilation_size'], configuration['diag-nlevel'], configuration['diag-nrecept']),
-                "seq_len":50
+                "seq_len":1000
         },
     }
     
@@ -371,34 +373,34 @@ if __name__ == "__main__":
     # define model
     model_argument = {
         # EFIT channels
-        "efit-hidden_dim":tune.choice([32, 64, 128, 256]),
-        "efit-channels":tune.choice([32, 64, 128, 256]),
+        "efit-hidden_dim":tune.choice([32, 64, 128]),
+        "efit-channels":tune.choice([32, 64, 128]),
         "efit-kernel_size":tune.choice([2,3,4]),
         "efit-dropout":tune.loguniform(1e-2, 5e-1),
         "efit-dilation_size":tune.choice([2,3]),
         "efit-nlevel":tune.choice([2,3,4,5]),
-        "efit-nrecept":tune.choice([1024, 1024 * 8, 1024 * 16]),
+        "efit-nrecept":tune.choice([32, 64, 128, 256]),
 
         # ECE channels
-        "ece-hidden_dim":tune.choice([32, 64, 128, 256]),
-        "ece-channels":tune.choice([32, 64, 128, 256]),
+        "ece-hidden_dim":tune.choice([32, 64, 128]),
+        "ece-channels":tune.choice([32, 64, 128]),
         "ece-kernel_size":tune.choice([2,3,4]),
         "ece-dropout":tune.loguniform(1e-2, 5e-1),
         "ece-dilation_size":tune.choice([2,3]),
         "ece-nlevel":tune.choice([2,3,4,5]),
-        "ece-nrecept":tune.choice([1024, 1024 * 8, 1024 * 16]),
+        "ece-nrecept":tune.choice([128, 256, 512, 1024]),
 
         # Diag channels
-        "diag-hidden_dim":tune.choice([32, 64, 128, 256]),
-        "diag-channels":tune.choice([32, 64, 128, 256]),
+        "diag-hidden_dim":tune.choice([32, 64, 128]),
+        "diag-channels":tune.choice([32, 64, 128]),
         "diag-kernel_size":tune.choice([2,3,4]),
         "diag-dropout":tune.loguniform(1e-2, 5e-1),
         "diag-dilation_size":tune.choice([2,3]),
         "diag-nlevel":tune.choice([2,3,4,5]),
-        "diag-nrecept":tune.choice([1024, 1024 * 8, 1024 * 16]),
+        "diag-nrecept":tune.choice([128, 256, 512, 1024]),
        
         # Classifier
-        "cls-cls_dim" : tune.choice([32, 64, 128, 256]),
+        "cls-cls_dim" : tune.choice([32, 64, 128]),
         "cls-prior_pi":tune.loguniform(0.2, 0.5),
         "cls-prior_sigma1":tune.loguniform(0.5, 5.0),
         "cls-prior_sigma2":tune.loguniform(0.001, 0.005)

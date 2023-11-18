@@ -165,9 +165,11 @@ if __name__ == "__main__":
         tTQend = ori_data_disrupt[ori_data_disrupt.shot == shot_num].t_tmq.values[0]
         tftsrt = ori_data_disrupt[ori_data_disrupt.shot == shot_num].t_flattop_start.values[0]
         tipminf = ori_data_disrupt[ori_data_disrupt.shot == shot_num].t_ip_min_fault.values[0]
+        t_warning = ori_data_disrupt[ori_data_disrupt.shot == shot_num].t_warning.values[0]
     
         t_disrupt = tTQend
         t_current = tipminf
+        t_warning = t_disrupt - t_warning
     
         data_efit = ori_data_efit[ori_data_efit.shot == shot_num]
         data_ece = ori_data_ece[ori_data_ece.shot == shot_num]
@@ -258,12 +260,12 @@ if __name__ == "__main__":
             eus = np.array([0] * n_ftsrt + eus)
         
         # plot disrupt prob
-        plot_disrupt_prob(probs, time_slice, tftsrt, t_disrupt, t_current, save_dir, args['dt'] * args['dist'], args['dt'] * args['dist_warning'], shot_num)
+        plot_disrupt_prob(probs, time_slice, tftsrt, t_disrupt, t_current, save_dir, args['dt'] * args['dist'], t_warning, shot_num)
         
         if args['plot_uncertainty']:
             aus = np.array(aus).reshape(-1)
             eus = np.array(eus).reshape(-1)
-            plot_disrupt_prob_uncertainty(probs, time_slice, aus, eus, tftsrt, t_disrupt, t_current, save_dir, args['dt'] * args['dist'], args['dt'] * args['dist_warning'], shot_num)
+            plot_disrupt_prob_uncertainty(probs, time_slice, aus, eus, tftsrt, t_disrupt, t_current, save_dir, args['dt'] * args['dist'], t_warning, shot_num)
      
         if args['plot_feature_importance']:
             plot_disrupt_prob_causes(feature_dict, shot_num, args['dt'], args['dist'], save_dir)

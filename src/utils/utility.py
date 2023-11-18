@@ -72,7 +72,7 @@ def preparing_0D_dataset(
     data_ece = pd.read_csv(filepath['ece']) if filepath['ece'].split(".")[-1] == "csv" else pd.read_pickle(filepath['ece'])
     data_diag = pd.read_csv(filepath['diag']) if filepath['diag'].split(".")[-1] == "csv" else pd.read_pickle(filepath['diag'])
     
-    # year selection: 2019,2020, 2021, 2022
+    # year selection: 2019, 2020, 2021, 2022
     data_disrupt = data_disrupt[data_disrupt.Year.astype(int).isin([2019,2020,2021,2022])]
     
     # train / valid / test data split
@@ -326,8 +326,6 @@ class MultiSignalDataset(Dataset):
         
         if self.scaler_diag is not None:
             self.data_diag.loc[:,config.DIAG + config.DIAG_FE] = self.scaler_diag.transform(self.data_diag[config.DIAG + config.DIAG_FE].values)
-            
-        print("# Inference | preprocessing the data")
         
     def __len__(self):
         return len(self.indices)
@@ -504,7 +502,7 @@ def plot_disrupt_prob(probs:Union[np.array, List], time_slice:Union[np.array, Li
     axes[0].set_xlabel("time(unit:s)")   
     axes[0].legend(loc = 'upper left', facecolor = 'white', framealpha=1)
     axes[0].set_ylim([0,1])
-    axes[0].set_xlim([0, max(time_slice) + 0.05])
+    axes[0].set_xlim([0, min(max(time_slice) + 0.05, t_cq + 0.1)])
     
     # plot zoom-in case
     axes[1].plot(time_slice, probs, 'b', label = 'disrupt prob')
@@ -705,9 +703,11 @@ def generate_model_performance(
     tTQend = data_disrupt[data_disrupt.shot == shot_num].t_tmq.values[0]
     tftsrt = data_disrupt[data_disrupt.shot == shot_num].t_flattop_start.values[0]
     tipminf = data_disrupt[data_disrupt.shot == shot_num].t_ip_min_fault.values[0]
+    t_warning = data_disrupt[data_disrupt.shot == shot_num].t_warning.values[0]
     
     t_disrupt = tTQend
     t_current = tipminf
+    t_warning = t_disrupt - t_warning
     
     data_efit = data_efit[data_efit.shot == shot_num]
     data_ece = data_ece[data_ece.shot == shot_num]
@@ -803,12 +803,12 @@ def generate_model_performance(
         fig_shot = None
     
     # plot disrupt prob
-    fig_dis = plot_disrupt_prob(probs, time_slice, tftsrt, t_disrupt, t_current, save_dir, dt * dist, dt * dist_warning, shot_num)
+    fig_dis = plot_disrupt_prob(probs, time_slice, tftsrt, t_disrupt, t_current, save_dir, dt * dist, t_warning, shot_num)
     
     if is_plot_uncertainty:        
         aus = np.array(aus).reshape(-1,1)
         eus = np.array(eus).reshape(-1,1)
-        fig_uc = plot_disrupt_prob_uncertainty(probs, time_slice, aus, eus, tftsrt, t_disrupt, t_current, save_dir, dt * dist, dt * dist_warning, shot_num)
+        fig_uc = plot_disrupt_prob_uncertainty(probs, time_slice, aus, eus, tftsrt, t_disrupt, t_current, save_dir, dt * dist, t_warning, shot_num)
     else:
         fig_uc = None
     

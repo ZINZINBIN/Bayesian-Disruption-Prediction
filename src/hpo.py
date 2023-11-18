@@ -54,12 +54,12 @@ def train_per_epoch(
         optimizer.step()
 
         train_loss += loss.item()
-
-        pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
+        pred = torch.nn.functional.sigmoid(output)
+        pred = torch.where(pred > 0.5, 1, 0)
         total_size += pred.size(0) 
         
         total_pred.append(pred.view(-1,1))
-        total_label.append(data['label'].view(-1,1))
+        total_label.append(torch.where(data['label'] > 0, 1, 0).view(-1,1))
         
     if scheduler:
         scheduler.step()
@@ -68,7 +68,7 @@ def train_per_epoch(
     total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
 
     if total_size > 0:
-        train_loss /= total_size
+        train_loss /= (batch_idx + 1)
         train_f1 = f1_score(total_label, total_pred, average = "macro")
         
     else:
@@ -91,7 +91,16 @@ def valid_per_epoch(
 
     total_pred = []
     total_label = []
-    total_size = 0
+    total_shot = []
+    total_dist = []
+    total_t_warning = []
+    
+    dt = valid_loader.dataset.dt
+    dist_warning = valid_loader.dataset.dist_warning
+    dist_minimum = valid_loader.dataset.dist
+    
+    t_interval = dt * dist_warning
+    t_minimum = dt * dist_minimum
 
     for batch_idx, data in enumerate(valid_loader):
         with torch.no_grad():
@@ -103,16 +112,27 @@ def valid_per_epoch(
             loss = loss_fn(output, data['label'].to(device))
     
             valid_loss += loss.item()
-            pred = torch.nn.functional.softmax(output, dim = 1).max(1, keepdim = True)[1]
-            total_size += pred.size(0)
-
+            pred = torch.nn.functional.sigmoid(output)
+            pred = torch.where(pred > 0.5, 1, 0)
+            
             total_pred.append(pred.view(-1,1))
-            total_label.append(data['label'].view(-1,1))
+            total_label.append(torch.where(data['label'] > 0, 1, 0).view(-1,1))
+            total_shot.append(data['shot_num'].view(-1,1))
+            total_dist.append(data['dist'].view(-1,1))
+            total_t_warning.append(data['t_warning'].view(-1,1))
 
     total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
     total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
+    
+    total_dist = torch.concat(total_dist, dim = 0).detach().view(-1).cpu().numpy()
+    total_shot = torch.concat(total_shot, dim = 0).detach().view(-1).cpu().numpy()
+    total_t_warning = torch.concat(total_t_warning, dim = 0).detach().view(-1).cpu().numpy()
+        
+    indice = np.where((total_dist > total_t_warning + t_interval)|(total_dist<= t_minimum))[0]
+    total_pred = total_pred[indice]
+    total_label = total_label[indice]
 
-    valid_loss /= total_size
+    valid_loss /= (batch_idx+1)
     valid_f1 = f1_score(total_label, total_pred, average = "macro")
 
     return valid_loss, valid_f1
@@ -293,13 +313,14 @@ def evaluate(
     test_f1 = 0
     total_pred = []
     total_label = []
-
-    if device is None:
-        device = torch.device("cuda:0")
-                              
-    model.eval()
+    total_t_warning = []
+    total_au = []
+    total_eu = []
     
-    total_size = 0
+    total_dist = []
+    total_shot = []
+
+    model.eval()
     
     for idx, data in enumerate(tqdm(test_loader, 'evaluation process')):
         with torch.no_grad():
@@ -307,24 +328,36 @@ def evaluate(
             loss = loss_fn(output, data['label'].to(device))
             test_loss += loss.item()
             
-            pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
-            pred = torch.logical_not((pred > torch.FloatTensor([threshold]).to(device)))
-            total_size += pred.size(0)
+            pred = torch.nn.functional.sigmoid(output)
             
-            pred_normal = torch.nn.functional.softmax(output, dim = 1)[:,1].detach()
-
-            total_pred.append(pred_normal.view(-1,1))
+            total_shot.append(data['shot_num'].view(-1,1))
+            total_dist.append(data['dist'].view(-1,1))
+            total_t_warning.append(data['t_warning'].view(-1,1))
+            
+            total_pred.append(pred.view(-1,1))
             total_label.append(data['label'].view(-1,1))
             
     test_loss /= (idx + 1)
-    
     total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
     total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
+    
+    total_dist = torch.concat(total_dist, dim = 0).detach().view(-1,).cpu().numpy()
+    total_shot = torch.concat(total_shot, dim = 0).detach().view(-1,).cpu().numpy()
+    t_warning = torch.concat(total_t_warning, dim = 0).detach().view(-1).cpu().numpy()
+    
+    # filtering data: non-disruptive data and disruptive data after TQ - 40ms for each shot
+    dt = test_loader.dataset.dt 
+    dist = test_loader.dataset.dist
+    dist_warning = test_loader.dataset.dist_warning
+    t_interval = dt * dist_warning
+    t_minimum = dt * dist
 
-    # method 2 : compute f1, auc, roc and classification report
-    # data clipping / postprocessing for ignoring nan, inf, too large data
+    total_shot = total_shot[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
+    total_label = total_label[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
+    total_pred = total_pred[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
+    
     total_pred = np.nan_to_num(total_pred, copy = True, nan = 0, posinf = 1.0, neginf = 0)
-    total_pred = np.where(total_pred > 1 - threshold, 1, 0)
+    total_pred = np.where(total_pred > threshold, 1, 0)
    
     # f1 score
     test_f1 = f1_score(total_label, total_pred, average = "macro")

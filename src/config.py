@@ -10,7 +10,8 @@ class Config():
             "efit":"./dataset/Bayesian_Disruption_efit.pkl",
             "ece":"./dataset/Bayesian_Disruption_ece.pkl",
             "diag":"./dataset/Bayesian_Disruption_diag.pkl",
-            "disrupt":'./dataset/Bayesian_Disruption_Shot_List.csv',
+            # "disrupt":'./dataset/Bayesian_Disruption_Shot_List.csv',
+            "disrupt":'./dataset/Bayesian_Disruption_Shot_List_revised.csv',
       }
       
       # EFIT
@@ -72,27 +73,27 @@ class Config():
                   "num_inputs":len(EFIT + EFIT_FE),
                   "hidden_dim":64,
                   "num_channels":[64] * 5,
-                  "kernel_size":4,
-                  "dropout":0.1,
-                  "dilation_size":calc_dilation(3, 2, 5, 1024),
+                  "kernel_size":2,
+                  "dropout":0.25,
+                  "dilation_size":calc_dilation(3, 2, 5, 128),
                   "seq_len":10 * 5 * 2
             },
             "ece":{
                   "num_inputs":len(ECE),
                   "hidden_dim":64,
                   "num_channels":[64] * 5,
-                  "kernel_size":4,
-                  "dropout":0.1,
-                  "dilation_size":calc_dilation(4, 2, 5, 1024 * 8),
+                  "kernel_size":3,
+                  "dropout":0.25,
+                  "dilation_size":calc_dilation(4, 2, 5, 1024),
                   "seq_len":50 * 10 * 2
             },
             "diag":{
                   "num_inputs":len(DIAG + DIAG_FE),
                   "hidden_dim":64,
                   "num_channels":[64] * 5,
-                  "kernel_size":4,
-                  "dropout":0.1,
-                  "dilation_size":calc_dilation(4, 2, 5, 1024 * 8),
+                  "kernel_size":3,
+                  "dropout":0.25,
+                  "dilation_size":calc_dilation(4, 2, 5, 1024),
                   "seq_len":50 * 10 * 2
             }
       }

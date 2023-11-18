@@ -21,11 +21,11 @@ def evaluate_prediction_performance(
     t_minimum : float = 0.04
     ):
     
-    
     total_pred = []
     total_label = []
     total_shot = []
     total_dist = []
+    total_t_warning = []
 
     if device is None:
         device = torch.device("cuda:0")
@@ -44,12 +44,14 @@ def evaluate_prediction_performance(
             
             total_shot.append(data['shot_num'].view(-1,1))
             total_dist.append(data['dist'].view(-1,1))
+            total_t_warning.append(data['t_warning'].view(-1,1))
             
     total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
     total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
     
     total_dist = torch.concat(total_dist, dim = 0).detach().view(-1,).cpu().numpy()
     total_shot = torch.concat(total_shot, dim = 0).detach().view(-1,).cpu().numpy()
+    total_t_warning = torch.concat(total_t_warning, dim = 0).detach().view(-1).cpu().numpy()
     
     TP = 0
     FP = 0
@@ -67,6 +69,7 @@ def evaluate_prediction_performance(
         pred = total_pred[indice]
         label = total_label[indice]
         dist = total_dist[indice]
+        t_warning = total_t_warning[indice]
 
         # compute false positive case
         alarm = pred[np.where(dist > t_warning)[0]]
@@ -76,10 +79,9 @@ def evaluate_prediction_performance(
         non_disrupt = label[np.where(dist > t_warning)[0]]
         rate = np.sum(np.where(alarm == non_disrupt, 1, 0)) / n_alarm
         
-        if rate > 0.975:
+        if rate > 0.9:
             TN += 1
             log_false.append(0)
-            
         else:
             FP += 1
             log_false.append(1)
@@ -92,7 +94,7 @@ def evaluate_prediction_performance(
         disrupt = label[np.where(dist < t_minimum)[0]]
         rate = np.sum(np.where(alarm == disrupt, 1, 0)) / n_alarm
      
-        if rate > 0.975:
+        if rate > 0.9:
             TP += 1
             log_true.append(1)
             log_missing.append(0)
@@ -127,6 +129,7 @@ def evaluate_prediction_performance(
             header = "="*20 +" Evaluation report for test shot "+ "="*20
             f.write(header)
             f.write("\nTPR: {:.3f} | FPR:{:.3f} | Precision:{:.3f} | Recall:{:.3f} | F1 score:{:.3f} | Accuracy:{:.3f}".format(TPR,FPR,PR,RC,F1,ACC))
+            f.write("\n Total shot : {}".format(len(np.unique(total_shot))))
             f.write("\n True alarm : {}".format(TP))
             f.write("\n False alarm : {}".format(FP))
             f.write("\n Missing alarm : {}".format(FN))
@@ -152,6 +155,7 @@ def evaluate(
     test_f1 = 0
     total_pred = []
     total_label = []
+    total_t_warning = []
     total_au = []
     total_eu = []
     
@@ -174,6 +178,7 @@ def evaluate(
             
             total_shot.append(data['shot_num'].view(-1,1))
             total_dist.append(data['dist'].view(-1,1))
+            total_t_warning.append(data['t_warning'].view(-1,1))
             
             if use_uncertainty:
                 
@@ -205,18 +210,18 @@ def evaluate(
     
     total_dist = torch.concat(total_dist, dim = 0).detach().view(-1,).cpu().numpy()
     total_shot = torch.concat(total_shot, dim = 0).detach().view(-1,).cpu().numpy()
+    t_warning = torch.concat(total_t_warning, dim = 0).detach().view(-1).cpu().numpy()
     
     # filtering data: non-disruptive data and disruptive data after TQ - 40ms for each shot
     dt = test_loader.dataset.dt 
     dist = test_loader.dataset.dist
     dist_warning = test_loader.dataset.dist_warning
-    
-    t_warning = dt * dist_warning
+    t_interval = dt * dist_warning
     t_minimum = dt * dist
 
-    total_shot = total_shot[np.where(((total_dist >= t_warning) | (total_dist <= t_minimum)))[0]]
-    total_label = total_label[np.where(((total_dist >= t_warning) | (total_dist <= t_minimum)))[0]]
-    total_pred = total_pred[np.where(((total_dist >= t_warning) | (total_dist <= t_minimum)))[0]]
+    total_shot = total_shot[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
+    total_label = total_label[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
+    total_pred = total_pred[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
     
     test_acc = np.sum(np.where(total_pred > threshold, 1, 0) == total_label) / len(total_label)
     
@@ -302,6 +307,9 @@ def evaluate_tensorboard(
     test_loss = 0
     total_pred = []
     total_label = []
+    total_t_warning = []
+    total_dist = []
+    total_shot = []
 
     if device is None:
         device = torch.device("cuda:0")
@@ -321,16 +329,32 @@ def evaluate_tensorboard(
             pred = torch.nn.functional.sigmoid(output)
             total_size += pred.size(0)
             
+            total_shot.append(data['shot_num'].view(-1,1))
+            total_dist.append(data['dist'].view(-1,1))
             total_pred.append(pred.view(-1,1))
             total_label.append(torch.where(data['label'] > 0, 1, 0).view(-1,1))
+            total_t_warning.append(data['t_warning'].view(-1,1))
 
     total_pred = torch.concat(total_pred, dim = 0).detach().view(-1,).cpu().numpy()
     total_label = torch.concat(total_label, dim = 0).detach().view(-1,).cpu().numpy()
+    total_dist = torch.concat(total_dist, dim = 0).detach().view(-1,).cpu().numpy()
+    total_shot = torch.concat(total_shot, dim = 0).detach().view(-1,).cpu().numpy()
+    t_warning = torch.concat(total_t_warning, dim = 0).detach().view(-1,).cpu().numpy()
     
     test_loss /= (idx + 1)
     
     # data clipping / postprocessing for ignoring nan, inf, too large data
     total_pred = np.nan_to_num(total_pred, copy = True, nan = 0, posinf = 1.0, neginf = 0)
+    
+    dt = test_loader.dataset.dt 
+    dist = test_loader.dataset.dist
+    dist_warning = test_loader.dataset.dist_warning
+    t_interval = dt * dist_warning
+    t_minimum = dt * dist
+    
+    total_shot = total_shot[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
+    total_label = total_label[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
+    total_pred = total_pred[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
     
     lr_probs = total_pred
     total_pred = np.where(total_pred > threshold, 1, 0)
@@ -412,7 +436,6 @@ def evaluate_detail(
     for idx, data in enumerate(tqdm(train_loader, 'evaluation process for train data')):
         with torch.no_grad():
             output = model(data)
-            # pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
             pred = torch.nn.functional.sigmoid(output)
             
             total_dist = np.concatenate((total_dist, data['dist'].cpu().numpy().reshape(-1,)))
@@ -428,7 +451,6 @@ def evaluate_detail(
     for idx, data in enumerate(tqdm(valid_loader, 'evaluation process for valid data')):
         with torch.no_grad():
             output = model(data)
-            # pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
             pred = torch.nn.functional.sigmoid(output)
             
             total_dist = np.concatenate((total_dist, data['dist'].cpu().numpy().reshape(-1,)))
@@ -443,7 +465,7 @@ def evaluate_detail(
     for idx, data in enumerate(tqdm(test_loader, 'evaluation process for test data')):
         with torch.no_grad():
             output = model(data)    
-            pred = torch.nn.functional.softmax(output, dim = 1)[:,0]
+            pred = torch.nn.functional.sigmoid(output)
             
             total_dist = np.concatenate((total_dist, data['dist'].cpu().numpy().reshape(-1,)))
             total_shot = np.concatenate((total_shot, data['shot_num'].cpu().numpy().reshape(-1,)))

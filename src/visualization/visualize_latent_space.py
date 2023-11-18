@@ -17,6 +17,7 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
     total_latent = []
     total_dist = []
     total_shot = []
+    total_t_warning = []
         
     for idx, data in enumerate(tqdm(dataloader, desc="visualize 2D latent space")):
         with torch.no_grad():
@@ -26,23 +27,25 @@ def visualize_2D_latent_space(model : nn.Module, dataloader : DataLoader, device
             
             total_shot.append(data['shot_num'].view(-1,1))
             total_dist.append(data['dist'].view(-1,1))
+            total_t_warning.append(data['t_warning'].view(-1,1))
     
     total_latent = np.concatenate(total_latent, axis = 0)
     total_label = total_label.astype(int)
     total_dist = torch.concat(total_dist, dim = 0).detach().view(-1,).cpu().numpy()
     total_shot = torch.concat(total_shot, dim = 0).detach().view(-1,).cpu().numpy()
+    t_warning = torch.concat(total_t_warning, dim = 0).detach().view(-1).cpu().numpy()
     
     # filtering data: non-disruptive data and disruptive data after TQ - 40ms for each shot
     dt = dataloader.dataset.dt 
     dist = dataloader.dataset.dist
     dist_warning = dataloader.dataset.dist_warning
     
-    t_warning = dt * dist_warning
+    t_interval = dt * dist_warning
     t_minimum = dt * dist
 
-    total_shot = total_shot[np.where(((total_dist >= t_warning) | (total_dist <= t_minimum)))[0]].astype(int)
-    total_label = total_label[np.where(((total_dist >= t_warning) | (total_dist <= t_minimum)))[0]]
-    total_latent = total_latent[np.where(((total_dist >= t_warning) | (total_dist <= t_minimum)))[0]]
+    total_shot = total_shot[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]].astype(int)
+    total_label = total_label[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
+    total_latent = total_latent[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
     
     new_indices = []
     
@@ -93,6 +96,7 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
     model.eval()
     
     total_label = np.array([])
+    total_t_warning = []
     total_probs = []
     total_latent = []
     total_dist = []
@@ -113,6 +117,7 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
             
             total_shot.append(data['shot_num'].view(-1,1))
             total_dist.append(data['dist'].view(-1,1))
+            total_t_warning.append(data['t_warning'].view(-1,1))
     
     total_latent = np.concatenate(total_latent, axis = 0)
     total_label = total_label.astype(int)
@@ -120,19 +125,20 @@ def visualize_2D_decision_boundary(model : nn.Module, dataloader : DataLoader, d
     
     total_dist = torch.concat(total_dist, dim = 0).detach().view(-1,).cpu().numpy()
     total_shot = torch.concat(total_shot, dim = 0).detach().view(-1,).cpu().numpy()
+    t_warning = torch.concat(total_t_warning, dim = 0).detach().view(-1).cpu().numpy()
     
     # filtering data: non-disruptive data and disruptive data after TQ - 40ms for each shot
     dt = dataloader.dataset.dt 
     dist = dataloader.dataset.dist
     dist_warning = dataloader.dataset.dist_warning
     
-    t_warning = dt * dist_warning
+    t_interval = dt * dist_warning
     t_minimum = dt * dist
 
-    total_shot = total_shot[np.where(((total_dist >= t_warning) | (total_dist <= t_minimum)))[0]].astype(int)
-    total_label = total_label[np.where(((total_dist >= t_warning) | (total_dist <= t_minimum)))[0]]
-    total_latent = total_latent[np.where(((total_dist >= t_warning) | (total_dist <= t_minimum)))[0]]
-    total_probs = total_probs[np.where(((total_dist >= t_warning) | (total_dist <= t_minimum)))[0]]
+    total_shot = total_shot[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]].astype(int)
+    total_label = total_label[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
+    total_latent = total_latent[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
+    total_probs = total_probs[np.where(((total_dist >= t_warning + t_interval) | (total_dist <= t_minimum)))[0]]
     
     new_indices = []
     
