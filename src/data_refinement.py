@@ -70,6 +70,15 @@ if __name__ == "__main__":
     df_diag = df_diag[df_diag.shot.isin(new_shot_list)]
     df_ts = df_ts[df_ts.shot.isin(new_shot_list)]
     
+    shot_year_mapping = {}
+    
+    for shot in df_disrupt.shot.unique():
+        shot_year_mapping[int(shot)] = df_disrupt[df_disrupt.shot == shot].Year.values[0]
+        
+    df_diag['Year'] = df_diag['shot'].apply(lambda x : shot_year_mapping[int(x)])
+    df_ece['Year'] = df_ece['shot'].apply(lambda x : shot_year_mapping[int(x)])
+    df_efit['Year'] = df_efit['shot'].apply(lambda x : shot_year_mapping[int(x)])
+    
     print("# of shot : ", len(new_shot_list))
     
     # check NaN stil exist
@@ -95,6 +104,13 @@ if __name__ == "__main__":
     df_ts[config.TS_NE_EDGE] = df_ts[config.TS_NE_EDGE].fillna(0)
     
     df_ece[config.ECE] = df_ece[config.ECE].fillna(0)
+    
+    ## TCI preprocessing : 23.11.23
+    ## 2017: 1 | 2018: 1,2,5 | 2019: 1,2,3,4 | 2020: 1,2,3,4,5
+    # '\\ne_tci01','\\ne_tci02','\\ne_tci03','\\ne_tci04','\\ne_tci05'
+    df_diag[df_diag.Year.astype(int).isin([2017])][['\\ne_tci02', '\\ne_tci03','\\ne_tci04', '\\ne_tci05']] = 0
+    df_diag[df_diag.Year.astype(int).isin([2018])][['\\ne_tci03', '\\ne_tci04']] = 0
+    df_diag[df_diag.Year.astype(int).isin([2019])][['\\ne_tci05']] = 0
     
     # recheck nan
     print("ECE data: ",sum(df_ece[config.ECE].isna().sum().values))
@@ -151,7 +167,7 @@ if __name__ == "__main__":
     df_diag[config.RC] = df_diag[config.RC].apply(lambda x : x / 1e6) # MV / Mamp
             
     for col in config.TCI:
-        df_diag[col] = df_diag[col].apply(lambda x : bound(x, 1e1))
+        df_diag[col] = df_diag[col].apply(lambda x : bound(x, 1e2))
         
     df_diag[config.HA] = df_diag[config.HA].apply(lambda x : x / 1e20)
     

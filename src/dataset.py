@@ -388,8 +388,8 @@ class MultiSignalDataset(Dataset):
                         idx_diag += 1
                         
                     elif self.dt == 0.001:
-                        idx_ece += 5
-                        idx_diag += 5
+                        idx_ece += 2
+                        idx_diag += 2
                 
                 elif t_ece < tftsrt + 1.0:
                     
@@ -454,7 +454,7 @@ class MultiSignalDataset(Dataset):
     
     def get_num_per_cls(self):
         self.num_per_cls_dict = dict()
-        self.num_per_cls_dict[1] = np.sum(np.where(self.labels == 1, 1, 0))
+        self.num_per_cls_dict[1] = np.sum(np.where(np.array(self.labels) > 0, 1, 0))
         self.num_per_cls_dict[0] = len(self.labels) - self.num_per_cls_dict[1]
         
     def get_cls_num_list(self):

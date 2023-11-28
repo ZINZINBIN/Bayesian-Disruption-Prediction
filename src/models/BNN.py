@@ -215,7 +215,6 @@ def compute_uncertainty_per_data(model : nn.Module, input : Dict[str, torch.Tens
     epistemic_uncertainty = np.dot(probs_diff.T, probs_diff) / n_samples
     epistemic_uncertainty = np.diag(epistemic_uncertainty)
     
-    aleatoric_uncertainty = np.diag(probs) - np.dot(probs.T, probs) / n_samples
-    aleatoric_uncertainty = np.diag(aleatoric_uncertainty)
+    aleatoric_uncertainty = probs_mean - np.dot(probs.T,probs)[0] / n_samples
     
     return aleatoric_uncertainty, epistemic_uncertainty

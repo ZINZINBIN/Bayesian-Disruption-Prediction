@@ -144,7 +144,7 @@ def calculate_outputs_and_gradients(inputs:torch.Tensor, model:nn.Module, target
         
         gradient = {}
 
-        for key in [col for col in input.keys() if col not in ['shot_num', 'label']]:
+        for key in [col for col in input.keys() if col not in ['shot_num', 'label','dist', 't_warning']]:
             gradient[key] = input[key].grad.detach()
         
         gradients.append(gradient)
@@ -164,7 +164,7 @@ def integrated_gradients(inputs:Dict[str, torch.Tensor], model:nn.Module, target
         
         comp = {}
         
-        for key in [col for col in inputs.keys() if col not in ['shot_num', 'label']]:
+        for key in [col for col in inputs.keys() if col not in ['shot_num', 'label', 'dist', 't_warning']]:
             comp[key] = baseline[key] + (float(step) / steps) * (inputs[key] - baseline[key])
             comp[key].requires_grad = True
             
@@ -174,12 +174,12 @@ def integrated_gradients(inputs:Dict[str, torch.Tensor], model:nn.Module, target
   
     avg_grads = {}
     
-    for key in [col for col in inputs.keys() if col not in ['shot_num', 'label']]:
+    for key in [col for col in inputs.keys() if col not in ['shot_num', 'label','dist', 't_warning']]:
         avg_grads[key] = torch.mean(torch.stack([grad[key] for grad in grads]), dim = 0)
     
     integrated_grad = {}
         
-    for key in [col for col in inputs.keys() if col not in ['shot_num', 'label']]:
+    for key in [col for col in inputs.keys() if col not in ['shot_num', 'label','dist', 't_warning']]:
         integrated_grad[key] = (inputs[key] - baseline[key]).detach() * avg_grads[key]
     
     return integrated_grad
@@ -191,7 +191,7 @@ def compute_relative_importance(inputs:Dict[str, torch.Tensor], model:nn.Module,
     
     feat_imp = []
     
-    for key in [col for col in inputs.keys() if col not in ['shot_num', 'label']]:
+    for key in [col for col in inputs.keys() if col not in ['shot_num', 'label','dist','t_warning']]:
         feat_imp.extend(IG[key].squeeze(0).abs().sum(dim=1).detach().cpu().numpy().reshape(-1,).tolist())
 
     # Reconstruction of feature importance
@@ -245,13 +245,6 @@ def compute_relative_importance(inputs:Dict[str, torch.Tensor], model:nn.Module,
     idx_last += idx + 1 
     info_dict['LV'] = imp_lv
     
-    imp_mp = 0
-    for idx, col in enumerate(config.MP):
-        imp_mp += feat_imp[idx + idx_last] / len(config.MP)
-        
-    idx_last += idx + 1 
-    info_dict['MP'] = imp_mp
-    
     imp_rc = 0
     for idx, col in enumerate(config.RC):
         imp_rc += feat_imp[idx + idx_last] / len(config.RC)
@@ -265,6 +258,13 @@ def compute_relative_importance(inputs:Dict[str, torch.Tensor], model:nn.Module,
         
     idx_last += idx + 1 
     info_dict['HA'] = imp_ha
+    
+    imp_mp = 0
+    for idx, col in enumerate(config.MP):
+        imp_mp += feat_imp[idx + idx_last] / len(config.MP)
+        
+    idx_last += idx + 1 
+    info_dict['MP'] = imp_mp
     
     imp_heating = 0
     for idx, col in enumerate(config.ECH + config.NBH):

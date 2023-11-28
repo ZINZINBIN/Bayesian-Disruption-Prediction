@@ -33,6 +33,8 @@ def parsing():
     parser.add_argument("--plot_shot_info", type = bool, default = False)
     parser.add_argument("--plot_uncertainty", type = bool, default = True)
     parser.add_argument("--plot_feature_importance", type = bool, default = True)
+    parser.add_argument("--plot_temporal_feature_importance", type = bool, default = False)
+    parser.add_argument("--plot_error_bar", type = bool, default = False)
     
     # random seed
     parser.add_argument("--random_seed", type = int, default = 42)
@@ -368,5 +370,7 @@ if __name__ == "__main__":
             scaler_type = args['scaler'],
             is_plot_shot_info=args['plot_shot_info'],
             is_plot_uncertainty=args['plot_uncertainty'],
-            is_plot_feature_importance=args['plot_feature_importance']
+            is_plot_feature_importance=args['plot_feature_importance'],
+            is_plot_error_bar=args['plot_error_bar'],
+            is_plot_temporal_feature_importance=args['plot_temporal_feature_importance']
         )

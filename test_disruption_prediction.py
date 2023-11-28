@@ -26,6 +26,7 @@ def parsing():
     parser.add_argument("--plot_shot_info", type = bool, default = False)
     parser.add_argument("--plot_uncertainty", type = bool, default = False)
     parser.add_argument("--plot_feature_importance", type = bool, default = False)
+    parser.add_argument("--plot_error_bar", type = bool, default = False)
     
     # random seed
     parser.add_argument("--random_seed", type = int, default = 42)

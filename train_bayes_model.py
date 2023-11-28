@@ -65,7 +65,7 @@ def parsing():
     parser.add_argument("--gamma", type = float, default = 0.95)
     
     # early stopping
-    parser.add_argument('--early_stopping', type = bool, default = True)
+    parser.add_argument('--early_stopping', type = bool, default = False)
     parser.add_argument("--early_stopping_patience", type = int, default = 16)
     parser.add_argument("--early_stopping_verbose", type = bool, default = True)
     parser.add_argument("--early_stopping_delta", type = float, default = 1e-3)
@@ -235,6 +235,7 @@ if __name__ == "__main__":
         per_cls_weights = 1.0 / np.array(cls_num_list)
         per_cls_weights = per_cls_weights / np.sum(per_cls_weights)
         per_cls_weights = torch.FloatTensor(per_cls_weights).to(device)
+        print("Re-weighting: {:.3f} : {:.3f}".format(per_cls_weights[0].item(), per_cls_weights[1].item()))
     else:
         per_cls_weights = np.array([1,1])
         per_cls_weights = torch.FloatTensor(per_cls_weights).to(device)

@@ -61,6 +61,7 @@ def evaluate_prediction_performance(
     log_missing = []
     log_true = []
     log_false = []
+    log_warning_time = []
     
     for shot in np.unique(total_shot):
         indice = np.where(total_shot == shot)[0]
@@ -102,7 +103,23 @@ def evaluate_prediction_performance(
             FN += 1
             log_true.append(0)
             log_missing.append(1)
-    
+            
+        # Alarm time vs accumulated detection rate
+        indice_sort = np.argsort(dist)
+        alarm = pred[indice_sort]
+        alarm = np.where(alarm > threshold, 1, 0)
+        dist_temp = []
+        
+        for idx in range(len(alarm)):
+            
+            rate = alarm[0:idx].sum() / (idx+1)
+            
+            if rate > 0.95:
+                dist_temp.append(dist[indice_sort][idx])
+            
+        t_warning_strt = max(dist_temp) if len(dist_temp) > 0 else 0
+        log_warning_time.append(t_warning_strt)
+        
     TPR = TP / (TP+FN)
     FPR = FP / (FP+TN)
     
@@ -116,7 +133,8 @@ def evaluate_prediction_performance(
         "shot":np.unique(total_shot),
         "True":log_true,
         "Missing":log_missing,
-        "False":log_false
+        "False":log_false,
+        "Warning":log_warning_time
     }
     
     shot_log = pd.DataFrame(shot_log)
@@ -249,11 +267,13 @@ def evaluate(
     fig, axes = plt.subplots(2,2, sharex = False, figsize = (15, 10))
     
     # confusion matrix
-    conf_mat = confusion_matrix(total_label, total_pred)
+    conf_mat = confusion_matrix(total_label, total_pred, normalize = 'true')
     s = sns.heatmap(
-        conf_mat, # conf_mat / np.sum(conf_mat),
+        # conf_mat,
+        conf_mat,
         annot = True,
-        fmt ='04d' ,# fmt = '.2f',
+        # fmt ='04d' ,
+        fmt = '.2f',
         cmap = 'Blues',
         xticklabels=["disruption","normal"],
         yticklabels=["disruption","normal"],

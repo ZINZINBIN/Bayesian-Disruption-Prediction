@@ -174,8 +174,6 @@ if __name__ == "__main__":
         valid_shot_list.append(int(shot))
         print("Shot:{} |t-warning:{:.3f} | Flattop:{:.3f} | TQ:{:.3f} | CQ:{:.3f}".format(int(shot), t_warning, tftsrt, t_tq, t_cq))
         
-        
-        
     print("Original shot:{}".format(len(disrupt)))
     print("Valid shot:{}".format(len(valid_shot_list)))
     

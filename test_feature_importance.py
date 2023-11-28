@@ -157,7 +157,7 @@ if __name__ == "__main__":
         test_list[key] = buffer
     
     print("================= Dataset information =================")
-    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test', args['dist_warning'])
+    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'eval', args['dist_warning'])
     test_data.get_shot_num = True
     
     # define model
@@ -178,14 +178,14 @@ if __name__ == "__main__":
     
     for idx, data in enumerate(test_loader):
         
-        if data['label'].numpy() == 0:
+        if data['label'].numpy() == 1:
             test_input = data
             test_shot = int(data['shot_num'].item())
             test_label = data['label']
             pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
             pred = np.where(pred > 0.5, 1, 0)
             
-            if pred == 1:
+            if pred == 0:
                 break
     
     fig, ax = plt.subplots(1,1)
@@ -202,14 +202,14 @@ if __name__ == "__main__":
     
     for idx, data in enumerate(test_loader):
         
-        if data['label'].numpy() == 1:
+        if data['label'].numpy() == 0:
             test_input = data
             test_shot = int(data['shot_num'].item())
             test_label = data['label']
             pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
             pred = np.where(pred > 0.5, 1, 0)
             
-            if pred == 0:
+            if pred == 1:
                 break
 
     fig, ax = plt.subplots(1,1)
@@ -224,18 +224,18 @@ if __name__ == "__main__":
     fig.tight_layout()
     plt.savefig("./results/feature_importance-FP.png")
     
-    
+    '''
     for idx, data in enumerate(test_loader):
         
         # LM causes
-        if data['label'].numpy() == 0 and data['shot_num'].item() in [20941, 20945, 20947, 20948, 20949, 20951]:
+        if data['label'].numpy() == 1 and data['shot_num'].item() in [20941,20945,20947,20948,20949,20951]:
             test_input = data
             test_shot = int(data['shot_num'].item())
             test_label = data['label']
             pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
             pred = np.where(pred > 0.5, 1, 0)
             
-            if pred == 0:
+            if pred == 1:
                 break
 
     fig, ax = plt.subplots(1,1)
@@ -249,6 +249,7 @@ if __name__ == "__main__":
     plt.suptitle("Relative importance - True positive case, shot : {}".format(test_shot))
     fig.tight_layout()
     plt.savefig("./results/feature_importance-TP.png")
+    '''
     
     # feature importance computation for test dataset
     cases = []
@@ -276,7 +277,7 @@ if __name__ == "__main__":
         pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
         pred = np.where(pred > 0.5, 1, 0)
         
-        if test_label == 1 and pred == 1:
+        if test_label == 0 and pred == 0:
             continue
         
         feat_imp = compute_relative_importance(test_input, model, 0, None, 8, device)
@@ -291,17 +292,19 @@ if __name__ == "__main__":
         results['preds'].append(test_pred)
         results['shots'].append(test_shot)
         
-        if test_label == 0:
+        if test_label == 1:
             # FN
-            if pred == 1:
+            if pred == 0:
                 results['cases'].append("FN")
             # TP
             else:
                 results['cases'].append("TP") 
         else:
             # FP
-            if pred == 0:
+            if pred == 1:
                 results['cases'].append("FP")
+            else:
+                results['cases'].append("TN")
     
     results = pd.DataFrame(results)
-    results.to_pickle("./results/analysis_feature_importance_test.pkl") 
+    results.to_pickle("./results/analysis_file/analysis_feature_importance_test.pkl") 

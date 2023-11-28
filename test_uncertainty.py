@@ -9,12 +9,13 @@ from src.utils.utility import preparing_0D_dataset, seed_everything
 from src.models.predictor import BayesianPredictor
 from src.models.BNN import compute_ensemble_probability, compute_uncertainty_per_data
 from src.config import Config
+from tqdm.auto import tqdm
 
 config = Config()
 
 # argument parser
 def parsing():
-    parser = argparse.ArgumentParser(description="testing bayesian disruption prediction model with multi-signal data")
+    parser = argparse.ArgumentParser(description="test bayesian disruption prediction model with multi-signal data for uncertainty analysis")
     
     # random seed
     parser.add_argument("--random_seed", type = int, default = 42)
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     train_list, valid_list, test_list, scaler_list = preparing_0D_dataset(config.filepath, None, args['scaler'], args['test_shot_num'])
     
     print("================= Dataset information =================")
-    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'test', args['dist_warning'])
+    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'eval', args['dist_warning'])
     test_data.get_shot_num = True
     
     # define model
@@ -193,7 +194,10 @@ if __name__ == "__main__":
             pred = np.where(pred > 0.5, 1, 0)
             
             if pred == 0:
-                break
+                au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128)
+                
+                if au[0] > 0.1:
+                    break
         
     test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
     au, eu = compute_uncertainty_per_data(model, test_input, device = device, n_samples = 128)
@@ -204,7 +208,7 @@ if __name__ == "__main__":
     print("aleatoric uncertainty: ", au[0])
     print("epistemic uncertainty: ", eu[0])
     
-    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - Missing alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FN.png")
+    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - Missing alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FN.eps")
     
     for idx, data in enumerate(test_loader):
         
@@ -227,7 +231,7 @@ if __name__ == "__main__":
     print("aleatoric uncertainty: ", au[0])
     print("epistemic uncertainty: ", eu[0])
     
-    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - False alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FP.png")
+    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - False alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FP.eps")
     
     for idx, data in enumerate(test_loader):
         
@@ -237,8 +241,9 @@ if __name__ == "__main__":
             test_label = data['label']
             pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
             pred = np.where(pred > 0.5, 1, 0)
+            dist = data['dist']
             
-            if pred == 1:
+            if pred == 1 and dist < 0.1:            
                 break
         
     test_pred = compute_ensemble_probability(model, test_input, device, n_samples = 128)
@@ -250,7 +255,7 @@ if __name__ == "__main__":
     print("aleatoric uncertainty: ", au[0])
     print("epistemic uncertainty: ", eu[0])
     
-    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - True Positive case, shot : {}".format(test_shot), "./results/analysis_file/test-TP.png")
+    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - True Positive case, shot : {}".format(test_shot), "./results/analysis_file/test-TP.eps")
     
     # uncertainty computation for test dataset
     aus = []
@@ -259,18 +264,17 @@ if __name__ == "__main__":
     shots = []
     cases = []
     dists = []
+    labels = []
     
-    test_data = MultiSignalDataset(test_list['disrupt'], test_list['efit'], test_list['ece'], test_list['diag'], args['seq_len_efit'], args['seq_len_ece'], args['seq_len_diag'], args['dist'], args['dt'], scaler_list['efit'], scaler_list['ece'], scaler_list['diag'], args['mode'], 'eval', args['dist_warning'])
-    test_sampler = RandomSampler(test_data)
-    test_loader = DataLoader(test_data, batch_size = 1, sampler=test_sampler, num_workers = 1, pin_memory=args["pin_memory"])
-
-    from tqdm.auto import tqdm
-    
+    print("\n============= Uncertainty analysis for test dataset =============\n")
     for idx, data in enumerate(tqdm(test_loader, 'uncertainty analysis results prepared...')):
         test_input = data
         test_shot = int(data['shot_num'].item())
         test_label = data['label'].numpy()
-        pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
+        
+        with torch.no_grad():
+            pred = torch.nn.functional.sigmoid(model(test_input)).detach().cpu().numpy()
+            
         pred = np.where(pred > 0.5, 1, 0)
         dist = data['dist'].item()
         
@@ -281,6 +285,7 @@ if __name__ == "__main__":
         preds.append(test_pred)
         shots.append(test_shot)
         dists.append(dist)
+        labels.append(test_label[0])
         
         if test_label == 1:
             # TP
@@ -302,7 +307,10 @@ if __name__ == "__main__":
         "eu" : eus,
         "preds" : preds,
         "shot" : shots,
-        "cases" : cases
+        "cases" : cases,
+        "dist":dists,
+        "label":labels
     }
+    
     results = pd.DataFrame(results)
     results.to_pickle("./results/analysis_file/analysis_uncertainty_test_{}.pkl".format(tag))    
