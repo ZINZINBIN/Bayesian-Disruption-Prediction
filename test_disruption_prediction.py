@@ -28,6 +28,12 @@ def parsing():
     parser.add_argument("--plot_feature_importance", type = bool, default = False)
     parser.add_argument("--plot_error_bar", type = bool, default = False)
     
+    # Threshold control
+    parser.add_argument("--threshold_tuning", type = bool, default = False)
+    parser.add_argument("--threshold_probability", type = float, default = 0.65)
+    parser.add_argument("--threshold_aleatoric", type = float, default = 0.20)
+    parser.add_argument("--threshold_epistemic", type = float, default = 0.001)
+    
     # random seed
     parser.add_argument("--random_seed", type = int, default = 42)
     
@@ -149,17 +155,23 @@ if __name__ == "__main__":
     print("\n====================== Probability curve generation process ======================\n")
     model.load_state_dict(torch.load(save_best_dir))
         
-    if not os.path.exists(os.path.join(save_dir, "prediction-test")):
-        os.makedirs(os.path.join(save_dir, "prediction-test"))
+    if args['threshold_tuning']:
+        dirname = "prediction-test-tuning"
+    else:
+        dirname = "prediction-test"
         
-    save_dir = os.path.join(save_dir, "prediction-test")
+    if not os.path.exists(os.path.join(save_dir, dirname)):
+        os.makedirs(os.path.join(save_dir, dirname))
+    
+    save_dir = os.path.join(save_dir, dirname)
     
     ori_data_disrupt = test_list['disrupt']
     ori_data_efit = test_list['efit']
     ori_data_ece = test_list['ece']
     ori_data_diag = test_list['diag']
     
-    test_shot_list = ori_data_disrupt.shot.unique()
+    # test_shot_list = ori_data_disrupt.shot.unique()
+    test_shot_list = [28158]
     
     for shot_num in tqdm(test_shot_list):
     
@@ -260,17 +272,33 @@ if __name__ == "__main__":
             aus = np.array([0] * n_ftsrt + aus)
             eus = np.array([0] * n_ftsrt + eus)
         
-        # plot disrupt prob
-        plot_disrupt_prob(probs, time_slice, tftsrt, t_disrupt, t_current, save_dir, args['dt'] * args['dist'], t_warning, shot_num)
-        
-        if args['plot_uncertainty']:
-            aus = np.array(aus).reshape(-1)
-            eus = np.array(eus).reshape(-1)
-            plot_disrupt_prob_uncertainty(probs, time_slice, aus, eus, tftsrt, t_disrupt, t_current, save_dir, args['dt'] * args['dist'], t_warning, shot_num)
-     
-        if args['plot_feature_importance']:
-            plot_disrupt_prob_causes(feature_dict, shot_num, args['dt'], args['dist'], save_dir)
+        if args['threshold_tuning']:
+            plot_disrupt_prob(probs, time_slice, tftsrt, t_disrupt, t_current, save_dir, args['dt'] * args['dist'], t_warning, shot_num, threshold_probability = args['threshold_probability'])
             
+            if args['plot_uncertainty']:
+                aus = np.array(aus).reshape(-1)
+                eus = np.array(eus).reshape(-1)
+                plot_disrupt_prob_uncertainty(
+                    probs, time_slice, aus, eus, tftsrt, t_disrupt, t_current, save_dir, args['dt'] * args['dist'], 
+                    t_warning, shot_num, threshold_probability = args['threshold_probability'], 
+                    # threshold_aleatoric = args['threshold_aleatoric'],
+                    threshold_epistemic = args['threshold_epistemic'],
+                    )
+        
+            if args['plot_feature_importance']:
+                plot_disrupt_prob_causes(feature_dict, shot_num, args['dt'], args['dist'], save_dir)         
+        
+        else:
+            plot_disrupt_prob(probs, time_slice, tftsrt, t_disrupt, t_current, save_dir, args['dt'] * args['dist'], t_warning, shot_num)
+            
+            if args['plot_uncertainty']:
+                aus = np.array(aus).reshape(-1)
+                eus = np.array(eus).reshape(-1)
+                plot_disrupt_prob_uncertainty(probs, time_slice, aus, eus, tftsrt, t_disrupt, t_current, save_dir, args['dt'] * args['dist'], t_warning, shot_num)
+        
+            if args['plot_feature_importance']:
+                plot_disrupt_prob_causes(feature_dict, shot_num, args['dt'], args['dist'], save_dir)
+        
         del data_efit
         del data_ece
         del data_diag

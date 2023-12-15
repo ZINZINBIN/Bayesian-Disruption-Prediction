@@ -205,77 +205,77 @@ def compute_relative_importance(inputs:Dict[str, torch.Tensor], model:nn.Module,
     
     imp_ece = 0
     for idx, col in enumerate(config.COLUMN_NAME_SCALER['ece']):
-        imp_ece += feat_imp[idx + idx_last] / len(config.COLUMN_NAME_SCALER['ece'])
+        imp_ece += feat_imp[idx + idx_last]  / len(config.COLUMN_NAME_SCALER['ece'])
     
     idx_last += idx + 1
     info_dict['ECE'] = imp_ece
     
     imp_lm = 0
     for idx, col in enumerate(config.LM):
-        imp_lm += feat_imp[idx + idx_last] / len(config.LM)
+        imp_lm += feat_imp[idx + idx_last]  / len(config.LM)
         
     idx_last += idx + 1 
     info_dict['LM'] = imp_lm
     
     imp_dl = 0
     for idx, col in enumerate(config.DL):
-        imp_dl += feat_imp[idx + idx_last] / len(config.DL)
+        imp_dl += feat_imp[idx + idx_last]  / len(config.DL)
         
     idx_last += idx + 1 
     info_dict['DL'] = imp_dl
     
     imp_hcm = 0
     for idx, col in enumerate(config.HCM):
-        imp_hcm += feat_imp[idx + idx_last] / len(config.HCM)
+        imp_hcm += feat_imp[idx + idx_last]  / len(config.HCM)
         
     idx_last += idx + 1 
     info_dict['HCM'] = imp_hcm
     
     imp_tci = 0
     for idx, col in enumerate(config.TCI):
-        imp_tci += feat_imp[idx + idx_last] / len(config.TCI)
+        imp_tci += feat_imp[idx + idx_last]  / len(config.TCI)
         
     idx_last += idx + 1 
     info_dict['TCI'] = imp_tci
     
     imp_lv = 0
     for idx, col in enumerate(config.LV):
-        imp_lv += feat_imp[idx + idx_last] / len(config.LV)
+        imp_lv += feat_imp[idx + idx_last]  / len(config.LV)
         
     idx_last += idx + 1 
     info_dict['LV'] = imp_lv
     
     imp_rc = 0
     for idx, col in enumerate(config.RC):
-        imp_rc += feat_imp[idx + idx_last] / len(config.RC)
+        imp_rc += feat_imp[idx + idx_last]  / len(config.RC)
         
     idx_last += idx + 1 
     info_dict['RC'] = imp_rc
     
     imp_ha = 0
     for idx, col in enumerate(config.HA):
-        imp_ha += feat_imp[idx + idx_last] / len(config.HA)
+        imp_ha += feat_imp[idx + idx_last]  / len(config.HA)
         
     idx_last += idx + 1 
     info_dict['HA'] = imp_ha
     
     imp_mp = 0
     for idx, col in enumerate(config.MP):
-        imp_mp += feat_imp[idx + idx_last] / len(config.MP)
+        imp_mp += feat_imp[idx + idx_last]  / len(config.MP)
         
     idx_last += idx + 1 
     info_dict['MP'] = imp_mp
     
     imp_heating = 0
     for idx, col in enumerate(config.ECH + config.NBH):
-        imp_heating += feat_imp[idx + idx_last] / len(config.ECH + config.NBH)
+        imp_heating += feat_imp[idx + idx_last]  / len(config.ECH + config.NBH)
         
     idx_last += idx + 1 
     info_dict['HEATING'] = imp_heating
     
     imp_bol = 0
     for idx, col in enumerate(config.BOL):
-        imp_bol += feat_imp[idx + idx_last] / len(config.BOL)
+        imp_bol += feat_imp[idx + idx_last]  / len(config.BOL)
         
     idx_last += idx + 1 
     info_dict['BOL'] = imp_bol

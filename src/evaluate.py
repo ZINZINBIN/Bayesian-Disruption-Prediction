@@ -18,7 +18,7 @@ def evaluate_prediction_performance(
     save_txt : Optional[str] = None,
     threshold : float = 0.5,
     t_warning : float = 0.4,
-    t_minimum : float = 0.04
+    t_minimum : float = 0.04,
     ):
     
     total_pred = []

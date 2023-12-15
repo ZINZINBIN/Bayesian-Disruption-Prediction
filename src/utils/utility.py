@@ -507,9 +507,13 @@ def plot_shot_info(
         plt.savefig(pathname, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
     return fig
 
-def plot_disrupt_prob(probs:Union[np.array, List], time_slice:Union[np.array, List], tftsrt, t_tq, t_cq, save_dir:str, t_pred:Optional[float] = 0.04, dt_warning: Optional[float] = 0.4, shot_num : Optional[int] = None, error_bar:Optional[np.array]=None):
+def plot_disrupt_prob(probs:Union[np.array, List], time_slice:Union[np.array, List], tftsrt, t_tq, t_cq, save_dir:str, t_pred:Optional[float] = 0.04, dt_warning: Optional[float] = 0.4, shot_num : Optional[int] = None, error_bar:Optional[np.array]=None, threshold_probability : Optional[float] = None):
     
-    threshold_line = [0.5] * len(time_slice)
+    
+    if threshold_probability is None:
+        threshold_line = [0.5] * len(time_slice)
+    else:
+        threshold_line = [threshold_probability] * len(time_slice)
     
     fig, axes = plt.subplots(1,2, figsize = (14, 5))
     if shot_num:
@@ -573,11 +577,25 @@ def plot_disrupt_prob(probs:Union[np.array, List], time_slice:Union[np.array, Li
     if save_dir:
         pathname = os.path.join(save_dir, "disruption_probability_curve_shot_{}.png".format(int(shot_num)))  
         plt.savefig(pathname, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
+        
+        # save as eps file
+        plt.savefig(os.path.join(save_dir, "disruption_probability_curve_shot_{}.eps".format(int(shot_num))), facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
     
     return fig
 
-def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[np.array, List], aus : np.ndarray, eus:np.ndarray, tftsrt, t_tq, t_cq, save_dir:str, t_pred:Optional[float] = 0.04, dt_warning:Optional[float] = 0.4, shot_num : Optional[int] = None):
-    threshold_line = [0.5] * len(time_slice)
+def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[np.array, List], aus : np.ndarray, eus:np.ndarray, tftsrt, t_tq, t_cq, save_dir:str, t_pred:Optional[float] = 0.04, dt_warning:Optional[float] = 0.4, shot_num : Optional[int] = None, threshold_probability : Optional[float] = None, threshold_aleatoric : Optional[float] = None, threshold_epistemic : Optional[float] = None):
+    
+    if threshold_probability is None:
+        threshold_line = [0.5] * len(time_slice)
+    else:
+        threshold_line = [threshold_probability] * len(time_slice)
+        
+    if threshold_aleatoric is not None:
+        threshold_uncertainty = [threshold_aleatoric] * len(time_slice)
+    elif threshold_epistemic is not None:
+        threshold_uncertainty = [threshold_epistemic] * len(time_slice)
+    else:
+        threshold_uncertainty = None
     
     fig, axes = plt.subplots(1,2, figsize = (14, 5))
     if shot_num:
@@ -587,6 +605,7 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
     # plot zoom-out case
     axes[0].plot(time_slice, probs, 'b', label = 'disrupt prob')
     axes[0].plot(time_slice, threshold_line, 'k', label = "threshold(p = 0.5)")
+    axes[0].axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed", label = "Flattop (t={:.3f})".format(tftsrt))
     axes[0].axvline(x = t_tq, ymin = 0, ymax = 1, color = "red", linestyle = "dashed", label = "TQ (t={:.3f})".format(t_tq))
     axes[0].axvline(x = t_cq, ymin = 0, ymax = 1, color = "green", linestyle = "dashed", label = "CQ (t={:.3f})".format(t_cq))
     
@@ -600,11 +619,12 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
     axes[0].set_ylabel("probability")
     axes[0].set_xlabel("time(unit:s)")   
     axes[0].legend(loc = 'upper left', facecolor = 'white', framealpha=1)
+    axes[0].set_xlim([0, min(max(time_slice) + 0.05, t_cq + 0.1)])
     axes[0].set_ylim([0,1])
-    
+
     # plot uncertainty
     axes[1].plot(time_slice, aus, 'b', label = 'aleatoric uncertainty')
-    axes[1].axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed", label = "flattop (t={:.3f})".format(tftsrt))
+    axes[1].axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed", label = "Flattop (t={:.3f})".format(tftsrt))
     axes[1].axvline(x = t_tq, ymin = 0, ymax = 1, color = "red", linestyle = "dashed", label = "TQ (t={:.3f})".format(t_tq))
     axes[1].axvline(x = t_cq, ymin = 0, ymax = 1, color = "green", linestyle = "dashed", label = "CQ (t={:.3f})".format(t_cq))
     
@@ -612,20 +632,32 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
         axes[1].axvline(x = t_minimum, ymin = 0, ymax = 1, color = "blue", linestyle = "dashed", label = "TQ-{:02d}ms (t={:.3f})".format(int(t_pred * 1000),t_minimum))
         axes[1].axvline(x = t_warning, ymin = 0, ymax = 1, color = "darkorange", linestyle = "dashed", label = "Warning (t={:.3f})".format(t_warning))
         
+    if threshold_aleatoric is not None:
+        axes[1].plot(time_slice, threshold_uncertainty, 'k', label = 'Thres-aleatoric:{:.3f}'.format(threshold_aleatoric))
+        axes[1].legend(loc = 'upper left', facecolor = 'white', framealpha=1)
+        
     axes[1].tick_params(axis = 'y', labelcolor = 'b')
     axes[1].set_xlabel("time(unit:s)")
     axes[1].set_ylabel("Aleatoric uncertainty")
+    axes[1].set_xlim([0, min(max(time_slice) + 0.05, t_cq + 0.1)])
     
     axes_ = axes[1].twinx()
     axes_.plot(time_slice, eus, 'r', label = 'epistemic uncertainty')
     axes_.tick_params(axis = 'y', labelcolor = 'r')
     axes_.set_ylabel("Epistemic uncertainty")
     
+    if threshold_epistemic is not None:
+        axes_.plot(time_slice, threshold_uncertainty, 'k', label = 'Thres-epistemic:{:.3f}'.format(threshold_epistemic))
+        axes_.legend(loc = 'upper left', facecolor = 'white', framealpha=1)
+        
     fig.tight_layout()
     
     if save_dir:
         pathname = os.path.join(save_dir, "disruption_prob_uncertainty_shot_{}.png".format(int(shot_num)))
         plt.savefig(pathname, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)
+        
+        # save as eps file
+        plt.savefig(os.path.join(save_dir, "disruption_prob_uncertainty_shot_{}.eps".format(int(shot_num))), facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)  
         
     # zoom in and save it again
     if t_pred:
@@ -641,6 +673,9 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
     if save_dir:
         pathname = os.path.join(save_dir, "disruption_prob_uncertainty_shot_{}_zoom_in.png".format(int(shot_num)))
         plt.savefig(pathname, facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)  
+        
+        # save as eps file
+        plt.savefig(os.path.join(save_dir, "disruption_prob_uncertainty_shot_{}_zoom_in.eps".format(int(shot_num))), facecolor = fig.get_facecolor(), edgecolor = 'none', transparent = False)  
         
     return fig
 
@@ -689,7 +724,7 @@ def plot_disrupt_prob_causes(feature_dict : Dict, shot_num : int, dt : float, di
     
     for idx, t in enumerate(feature_dict['time']):
         
-        if int(t * 1000) not in [0,5,10,15,20,25,30,35,40]:
+        if int(t * 1000) not in [0,10,20,30,40]: # [0,50,100,150,200,250,300]: # [0,5,10,15,20,25,30,35,40]:
             continue
         
         time_slice.append(t)
@@ -706,7 +741,7 @@ def plot_disrupt_prob_causes(feature_dict : Dict, shot_num : int, dt : float, di
         ax.set_yticks(ticks = time_slice, labels = ["{:02d} ms".format(int(t * 1000)) for t in time_slice])
         
     ax.set_zlabel('Feature importance', fontsize = 12)
-    ax.set_ylabel('$t_{pred}$ before TQ (unit:ms)', fontsize = 12)
+    # ax.set_ylabel('$t_{pred}$ before TQ (unit:ms)', fontsize = 12)
     ax.set_zlim([0,1])
     fig.tight_layout()
 
@@ -839,6 +874,7 @@ def generate_model_performance(
                     temporal_feature_dict[key].append(feat[key])
         
         if t >= t_disrupt - (dist+5) * dt and t <= t_disrupt and is_plot_feature_importance:
+        # if t >= t_disrupt - t_warning and t <= t_disrupt and is_plot_feature_importance:
             if feature_dict is None:
                 feat = compute_relative_importance(data, model, 0, None, 16, device)
                 feature_dict = {}
