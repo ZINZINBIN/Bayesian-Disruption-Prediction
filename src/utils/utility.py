@@ -463,6 +463,7 @@ def plot_shot_info(
     ax_tci.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
     ax_tci.set_ylabel("ne-TCI(unit:$10^{19}$ $m^{-3}$)")
     ax_tci.set_xlabel("time(unit:s)")
+    ax_tci.set_ylim([0, 6.0])
     ax_tci.legend(loc = 'upper right')
     
     # Diagnostic part
@@ -597,7 +598,7 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
     else:
         threshold_uncertainty = None
     
-    fig, axes = plt.subplots(1,2, figsize = (14, 5))
+    fig, axes = plt.subplots(1,2, figsize = (16, 5)) # (14,5)
     if shot_num:
         fig.suptitle("Disruption prediction with shot : {}".format(int(shot_num)))
     axes = axes.ravel()
@@ -621,6 +622,10 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
     axes[0].legend(loc = 'upper left', facecolor = 'white', framealpha=1)
     axes[0].set_xlim([0, min(max(time_slice) + 0.05, t_cq + 0.1)])
     axes[0].set_ylim([0,1])
+    
+    # shot 28158
+    axes[0].fill([2.2,2.2,3.0,3.0], [0,1,1,0], color = 'yellow', alpha = 0.5)
+    axes[0].fill([7.2,7.2,7.92,7.92], [0,1,1,0], color = 'yellow', alpha = 0.5)
 
     # plot uncertainty
     axes[1].plot(time_slice, aus, 'b', label = 'aleatoric uncertainty')
@@ -640,6 +645,10 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
     axes[1].set_xlabel("time(unit:s)")
     axes[1].set_ylabel("Aleatoric uncertainty")
     axes[1].set_xlim([0, min(max(time_slice) + 0.05, t_cq + 0.1)])
+    
+    # shot 28158
+    # axes[1].fill([2.2,2.2,3.0,3.0], [0,0.25,0.25,0], color = 'yellow', alpha = 0.5)
+    # axes[1].fill([7.2,7.2,7.92,7.92], [0,0.25,0.25,0], color = 'yellow', alpha = 0.5)
     
     axes_ = axes[1].twinx()
     axes_.plot(time_slice, eus, 'r', label = 'epistemic uncertainty')

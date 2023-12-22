@@ -208,7 +208,8 @@ if __name__ == "__main__":
     print("aleatoric uncertainty: ", au[0])
     print("epistemic uncertainty: ", eu[0])
     
-    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - Missing alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FN.eps")
+    plot_output_distribution(test_pred, "Disruptive phase - Missing alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FN.eps")
+    plot_output_distribution(test_pred, "Disruptive phase - Missing alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FN.png")
     
     for idx, data in enumerate(test_loader):
         
@@ -231,7 +232,8 @@ if __name__ == "__main__":
     print("aleatoric uncertainty: ", au[0])
     print("epistemic uncertainty: ", eu[0])
     
-    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - False alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FP.eps")
+    plot_output_distribution(test_pred, "Disruptive phase - False alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FP.eps")
+    plot_output_distribution(test_pred, "Disruptive phase - False alarm case, shot : {}".format(test_shot), "./results/analysis_file/test-FP.png")
     
     for idx, data in enumerate(test_loader):
         
@@ -255,7 +257,8 @@ if __name__ == "__main__":
     print("aleatoric uncertainty: ", au[0])
     print("epistemic uncertainty: ", eu[0])
     
-    fig, axes = plot_output_distribution(test_pred, "Disruptive phase - True Positive case, shot : {}".format(test_shot), "./results/analysis_file/test-TP.eps")
+    plot_output_distribution(test_pred, "Disruptive phase - True Positive case, shot : {}".format(test_shot), "./results/analysis_file/test-TP.eps")
+    plot_output_distribution(test_pred, "Disruptive phase - True Positive case, shot : {}".format(test_shot), "./results/analysis_file/test-TP.png")
     
     # uncertainty computation for test dataset
     aus = []
