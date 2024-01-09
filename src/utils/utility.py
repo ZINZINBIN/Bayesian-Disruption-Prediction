@@ -395,8 +395,10 @@ def plot_shot_info(
     ln2 = ax_iv.plot(plot_diag['time'], plot_diag['\\VCM03'].abs() - plot_diag['\\RC03'].abs(), c = 'r', label = 'Iv')
     lns = ln1 + ln2
     labs = [l.get_label() for l in lns]
-    ax_ip.legend(lns, labs, loc = 'upper right')
-    ax_ip.set_ylabel("Ip")
+    ax_ip.legend(lns, labs, loc = 'upper right', fontsize = "12")
+    ax_ip.set_ylabel("Ip", fontsize = 12)
+    ax_ip.tick_params(labelsize = 12)
+    ax_iv.tick_params(labelsize = 12)
 
     # betap
     ax_betap = fig.add_subplot(gs[1,0])
@@ -404,8 +406,9 @@ def plot_shot_info(
     ax_betap.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed")
     ax_betap.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_betap.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    ax_betap.legend(loc = 'upper right')
-    ax_betap.set_ylabel("betap")
+    ax_betap.legend(loc = 'upper right', fontsize = "12")
+    ax_betap.set_ylabel("betap", fontsize = 12)
+    ax_betap.tick_params(labelsize = 12)
     
     # li
     ax_li = fig.add_subplot(gs[2,0])
@@ -413,8 +416,9 @@ def plot_shot_info(
     ax_li.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed")
     ax_li.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_li.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    ax_li.legend(loc = 'upper right')
-    ax_li.set_ylabel("li")
+    ax_li.legend(loc = 'upper right', fontsize = "12")
+    ax_li.set_ylabel("li", fontsize = 12)
+    ax_li.tick_params(labelsize = 12)
     
     # q95
     ax_q95 = fig.add_subplot(gs[3,0])
@@ -423,9 +427,10 @@ def plot_shot_info(
     ax_q95.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_q95.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
     ax_q95.set_ylim([0, 10.0])
-    ax_q95.set_ylabel("q95")
-    ax_q95.set_xlabel("time(unit:s)")
-    ax_q95.legend(loc = 'upper right')
+    ax_q95.set_ylabel("q95", fontsize = 12)
+    ax_q95.set_xlabel("time(unit:s)", fontsize = 12)
+    ax_q95.legend(loc = 'upper right', fontsize = "12")
+    ax_q95.tick_params(labelsize = 12)
     
     # ECE part
     ax_ece = fig.add_subplot(gs[0:2,1])
@@ -435,8 +440,9 @@ def plot_shot_info(
     ax_ece.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed")
     ax_ece.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_ece.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    ax_ece.set_ylabel("ECE(unit:KeV)")
-    ax_ece.legend(loc = 'upper right')
+    ax_ece.set_ylabel("ECE(unit:KeV)", fontsize = 12)
+    ax_ece.legend(loc = 'upper right', fontsize = "12")
+    ax_ece.tick_params(labelsize = 12)
     
     ax_tci = fig.add_subplot(gs[2:,1])
     
@@ -461,10 +467,11 @@ def plot_shot_info(
     ax_tci.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed")
     ax_tci.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_tci.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    ax_tci.set_ylabel("ne-TCI(unit:$10^{19}$ $m^{-3}$)")
-    ax_tci.set_xlabel("time(unit:s)")
+    ax_tci.set_ylabel("ne-TCI(unit:$10^{19}$ $m^{-3}$)", fontsize = 12)
+    ax_tci.set_xlabel("time(unit:s)", fontsize = 12)
     ax_tci.set_ylim([0, 6.0])
-    ax_tci.legend(loc = 'upper right')
+    ax_tci.legend(loc = 'upper right', fontsize = "12")
+    ax_tci.tick_params(labelsize = 12)
     
     # Diagnostic part
     # Stored energy
@@ -473,7 +480,8 @@ def plot_shot_info(
     ax_w.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed")
     ax_w.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_w.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    ax_w.legend(loc = 'upper right')
+    ax_w.legend(loc = 'upper right', fontsize = "12")
+    ax_w.tick_params(labelsize = 12)
     
     # EC heating
     ax_ech = fig.add_subplot(gs[1,2])
@@ -481,7 +489,8 @@ def plot_shot_info(
     ax_ech.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed")
     ax_ech.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_ech.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    ax_ech.legend(loc = 'upper right')
+    ax_ech.legend(loc = 'upper right', fontsize = "12")
+    ax_ech.tick_params(labelsize = 12)
     
     # NB heating
     ax_nbh = fig.add_subplot(gs[2,2])
@@ -489,7 +498,8 @@ def plot_shot_info(
     ax_nbh.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed")
     ax_nbh.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_nbh.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    ax_nbh.legend(loc = 'upper right')
+    ax_nbh.legend(loc = 'upper right', fontsize = "12")
+    ax_nbh.tick_params(labelsize = 12)
     
     # Bolometer
     ax_bol = fig.add_subplot(gs[3,2])
@@ -497,8 +507,9 @@ def plot_shot_info(
     ax_bol.axvline(x = tftsrt, ymin = 0, ymax = 1, color = "black", linestyle = "dashed")
     ax_bol.axvline(x = t_disrupt, ymin = 0, ymax = 1, color = "red", linestyle = "dashed")
     ax_bol.axvline(x = t_current, ymin = 0, ymax = 1, color = "green", linestyle = "dashed")
-    ax_bol.set_xlabel("time(unit:s)")
-    ax_bol.legend(loc = 'upper right')
+    ax_bol.set_xlabel("time(unit:s)", fontsize = 12)
+    ax_bol.legend(loc = 'upper right', fontsize = "12")
+    ax_bol.tick_params(labelsize = 12)
     
     fig.tight_layout()
     
@@ -516,9 +527,10 @@ def plot_disrupt_prob(probs:Union[np.array, List], time_slice:Union[np.array, Li
     else:
         threshold_line = [threshold_probability] * len(time_slice)
     
-    fig, axes = plt.subplots(1,2, figsize = (14, 5))
+    fig, axes = plt.subplots(1,2, figsize = (16, 6))
     if shot_num:
-        fig.suptitle("Disruption prediction with shot : {}".format(int(shot_num)))
+        fig.suptitle("Disruption prediction with shot : {}".format(int(shot_num)), fontsize = 14)
+        
     axes = axes.ravel()
     
     # plot general case
@@ -535,11 +547,12 @@ def plot_disrupt_prob(probs:Union[np.array, List], time_slice:Union[np.array, Li
         axes[0].axvline(x = t_minimum, ymin = 0, ymax = 1, color = "blue", linestyle = "dashed", label = "Disruptive (t={:.3f})".format(t_minimum))
         axes[0].axvline(x = t_warning, ymin = 0, ymax = 1, color = "darkorange", linestyle = "dashed", label = "Warning (t={:.3f})".format(t_warning))
         
-    axes[0].set_ylabel("probability")
-    axes[0].set_xlabel("time(unit:s)")   
+    axes[0].set_ylabel("Probability", fontsize = 12)
+    axes[0].set_xlabel("Time(unit:s)", fontsize = 12)   
     axes[0].legend(loc = 'upper left', facecolor = 'white', framealpha=1)
     axes[0].set_ylim([0,1])
     axes[0].set_xlim([0, min(max(time_slice) + 0.05, t_cq + 0.1)])
+    axes[0].tick_params(labelsize = 12)
     
     # plot zoom-in case
     axes[1].plot(time_slice, probs, 'b', label = 'disrupt prob')
@@ -554,10 +567,11 @@ def plot_disrupt_prob(probs:Union[np.array, List], time_slice:Union[np.array, Li
         axes[1].axvline(x = t_minimum, ymin = 0, ymax = 1, color = "blue", linestyle = "dashed", label = "TQ-{:02d}ms (t={:.3f})".format(int(t_pred * 1000),t_minimum))
         axes[1].axvline(x = t_warning, ymin = 0, ymax = 1, color = "darkorange", linestyle = "dashed", label = "Warning (t={:.3f})".format(t_warning))
      
-    axes[1].set_ylabel("probability")
-    axes[1].set_xlabel("time(unit:s)")   
+    axes[1].set_ylabel("Probability", fontsize = 12)
+    axes[1].set_xlabel("Time(unit:s)", fontsize = 12)   
     axes[1].legend(loc = 'upper left', facecolor = 'white', framealpha=1)
     axes[1].set_ylim([0,1])
+    axes[1].tick_params(labelsize = 12)
     
     if t_pred:
         axes[1].set_xlim([t_warning - 0.25, t_cq + 0.05])
@@ -598,9 +612,9 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
     else:
         threshold_uncertainty = None
     
-    fig, axes = plt.subplots(1,2, figsize = (16, 5)) # (14,5)
+    fig, axes = plt.subplots(1,2, figsize = (16, 6)) # (14,5)
     if shot_num:
-        fig.suptitle("Disruption prediction with shot : {}".format(int(shot_num)))
+        fig.suptitle("Disruption prediction with shot : {}".format(int(shot_num)), fontsize = 14)
     axes = axes.ravel()
 
     # plot zoom-out case
@@ -617,15 +631,16 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
         axes[0].axvline(x = t_minimum, ymin = 0, ymax = 1, color = "blue", linestyle = "dashed", label = "TQ-{:02d}ms (t={:.3f})".format(int(t_pred * 1000),t_minimum))
         axes[0].axvline(x = t_warning, ymin = 0, ymax = 1, color = "darkorange", linestyle = "dashed", label = "Warning (t={:.3f})".format(t_warning))
             
-    axes[0].set_ylabel("probability")
-    axes[0].set_xlabel("time(unit:s)")   
+    axes[0].set_ylabel("Probability", fontsize = 12)
+    axes[0].set_xlabel("Time(unit:s)", fontsize = 12)   
     axes[0].legend(loc = 'upper left', facecolor = 'white', framealpha=1)
     axes[0].set_xlim([0, min(max(time_slice) + 0.05, t_cq + 0.1)])
     axes[0].set_ylim([0,1])
+    axes[0].tick_params(labelsize = 12)
     
     # shot 28158
-    axes[0].fill([2.2,2.2,3.0,3.0], [0,1,1,0], color = 'yellow', alpha = 0.5)
-    axes[0].fill([7.2,7.2,7.92,7.92], [0,1,1,0], color = 'yellow', alpha = 0.5)
+    # axes[0].fill([2.2,2.2,3.0,3.0], [0,1,1,0], color = 'yellow', alpha = 0.5)
+    # axes[0].fill([7.2,7.2,7.92,7.92], [0,1,1,0], color = 'yellow', alpha = 0.5)
 
     # plot uncertainty
     axes[1].plot(time_slice, aus, 'b', label = 'aleatoric uncertainty')
@@ -641,9 +656,9 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
         axes[1].plot(time_slice, threshold_uncertainty, 'k', label = 'Thres-aleatoric:{:.3f}'.format(threshold_aleatoric))
         axes[1].legend(loc = 'upper left', facecolor = 'white', framealpha=1)
         
-    axes[1].tick_params(axis = 'y', labelcolor = 'b')
-    axes[1].set_xlabel("time(unit:s)")
-    axes[1].set_ylabel("Aleatoric uncertainty")
+    axes[1].tick_params(axis = 'y', labelcolor = 'b', labelsize = 12)
+    axes[1].set_xlabel("Time(unit:s)", fontsize = 12)
+    axes[1].set_ylabel("Aleatoric uncertainty", fontsize = 12, color = 'b')
     axes[1].set_xlim([0, min(max(time_slice) + 0.05, t_cq + 0.1)])
     
     # shot 28158
@@ -652,8 +667,8 @@ def plot_disrupt_prob_uncertainty(probs:Union[np.array, List], time_slice:Union[
     
     axes_ = axes[1].twinx()
     axes_.plot(time_slice, eus, 'r', label = 'epistemic uncertainty')
-    axes_.tick_params(axis = 'y', labelcolor = 'r')
-    axes_.set_ylabel("Epistemic uncertainty")
+    axes_.tick_params(axis = 'y', labelcolor = 'r', labelsize = 12)
+    axes_.set_ylabel("Epistemic uncertainty", fontsize = 12, rotation = 270, color = 'r', labelpad = 15)
     
     if threshold_epistemic is not None:
         axes_.plot(time_slice, threshold_uncertainty, 'k', label = 'Thres-epistemic:{:.3f}'.format(threshold_epistemic))

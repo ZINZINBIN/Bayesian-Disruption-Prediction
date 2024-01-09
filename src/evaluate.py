@@ -264,24 +264,27 @@ def evaluate(
     ns_auc = roc_auc_score(total_label, ns_probs, average="macro")
     lr_auc = roc_auc_score(total_label, lr_probs, average = "macro")
     
+    '''
+    # version 01
     fig, axes = plt.subplots(2,2, sharex = False, figsize = (15, 10))
     
     # confusion matrix
     conf_mat = confusion_matrix(total_label, total_pred, normalize = 'true')
     s = sns.heatmap(
-        # conf_mat,
         conf_mat,
         annot = True,
         # fmt ='04d' ,
         fmt = '.2f',
         cmap = 'Blues',
-        xticklabels=["disruption","normal"],
-        yticklabels=["disruption","normal"],
-        ax = axes[0,0]
+        xticklabels=["Disruption","Normal"],
+        yticklabels=["Disruption","Normal"],
+        ax = axes[0,0],
+        annot_kws={"size":14}
     )
 
-    s.set_xlabel("Prediction")
-    s.set_ylabel("Actual")
+    axes[0,0].tick_params(labelsize = 14)
+    s.set_xlabel("Prediction", fontsize = 14)
+    s.set_ylabel("Actual", fontsize = 14)
 
     # roc curve
     ns_fpr, ns_tpr, _ = roc_curve(total_label, ns_probs)
@@ -289,16 +292,56 @@ def evaluate(
     
     axes[0,1].plot(ns_fpr, ns_tpr, linestyle = '--', label = 'Random')
     axes[0,1].plot(lr_fpr, lr_tpr, marker = '.', label = 'Model')
-    axes[0,1].set_xlabel('False Positive Rate')
-    axes[0,1].set_ylabel('True Positive Rate')
+    axes[0,1].set_xlabel('False Positive Rate', fontsize = 14)
+    axes[0,1].set_ylabel('True Positive Rate', fontsize = 14)
+    axes[0,1].tick_params(labelsize = 14)
     
     lr_precision, lr_recall, _ = precision_recall_curve(total_label, lr_probs)
     axes[1,0].plot(lr_recall, lr_precision, marker = '.', label = 'Model')
-    axes[1,0].set_xlabel("Recall")
-    axes[1,0].set_ylabel("Precision")
+    axes[1,0].set_xlabel("Recall", fontsize = 14)
+    axes[1,0].set_ylabel("Precision", fontsize = 14)
+    axes[1,0].tick_params(labelsize = 14)
     
     clf_report = classification_report(total_label, total_pred, labels = [0,1], target_names = ["Disrupt", "Normal"], output_dict = True)
-    s2 = sns.heatmap(pd.DataFrame(clf_report).iloc[:-1, :].T, annot = True, ax = axes[1,1])
+    s2 = sns.heatmap(pd.DataFrame(clf_report).iloc[:-1, :].T, annot = True, ax = axes[1,1], annot_kws={"size":14})
+    axes[1,1].tick_params(labelsize = 14)
+    fig.tight_layout()
+    '''
+    
+    # version 02
+    fig, axes = plt.subplots(1,3, sharex = False, figsize = (18, 5))
+    conf_mat = confusion_matrix(total_label, total_pred, normalize = 'true')
+    s = sns.heatmap(
+        conf_mat,
+        annot = True,
+        fmt = '.2f',
+        cmap = 'Blues',
+        xticklabels=["Disruption","Normal"],
+        yticklabels=["Disruption","Normal"],
+        ax = axes[0],
+        annot_kws={"size":14}
+    )
+
+    axes[0].tick_params(labelsize = 14)
+    s.set_xlabel("Prediction", fontsize = 14)
+    s.set_ylabel("Actual", fontsize = 14)
+    
+    # roc curve
+    ns_fpr, ns_tpr, _ = roc_curve(total_label, ns_probs)
+    lr_fpr, lr_tpr, _ = roc_curve(total_label, lr_probs)
+    
+    axes[1].plot(ns_fpr, ns_tpr, linestyle = '--', label = 'Random')
+    axes[1].plot(lr_fpr, lr_tpr, marker = '.', label = 'Model')
+    axes[1].set_xlabel('False Positive Rate', fontsize = 14)
+    axes[1].set_ylabel('True Positive Rate', fontsize = 14)
+    axes[1].tick_params(labelsize = 14)
+    
+    lr_precision, lr_recall, _ = precision_recall_curve(total_label, lr_probs)
+    axes[2].plot(lr_recall, lr_precision, marker = '.', label = 'Model')
+    axes[2].set_xlabel("Recall", fontsize = 14)
+    axes[2].set_ylabel("Precision", fontsize = 14)
+    axes[2].tick_params(labelsize = 14)
+    
     fig.tight_layout()
     
     if save_conf:
@@ -396,9 +439,9 @@ def evaluate_tensorboard(
         annot = True,
         fmt ='04d' ,# fmt = '.2f',
         cmap = 'Blues',
-        xticklabels=["normal","disruption"],
-        yticklabels=["normal","disruption"],
-        ax = axes[0,0]
+        xticklabels=["Disruption","Normal"],
+        yticklabels=["Disruption","Normal"],
+        ax = axes[0,0],
     )
 
     s.set_xlabel("Prediction")

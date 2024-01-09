@@ -169,13 +169,16 @@ if __name__ == "__main__":
         counts, bins = np.histogram(pred.reshape(-1,))
         ax.hist(bins[:-1], bins = bins, weights = counts, color = 'gray')
         
-        ax.set_xlabel("Output (prob)")
+        ax.set_xlabel("Output (prob)", fontsize = 14)
         ax.set_xlim([0, 1.0])
-        ax.set_ylabel('n-samples')
-        ax.set_title("Probability histogram")
+        ax.set_ylabel('n-samples', fontsize = 14)
+        ax.set_title("Probability histogram", fontsize = 14)
+        
+        plt.xticks(fontsize = 14)
+        plt.yticks(fontsize = 14)
    
         if title:
-            plt.suptitle(title)
+            plt.suptitle(title, fontsize = 14)
             
         fig.tight_layout()
         

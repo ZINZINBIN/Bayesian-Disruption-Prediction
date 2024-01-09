@@ -32,7 +32,7 @@ def parsing():
     parser.add_argument("--prediction", type = bool, default = True)
     parser.add_argument("--plot_shot_info", type = bool, default = False)
     parser.add_argument("--plot_uncertainty", type = bool, default = True)
-    parser.add_argument("--plot_feature_importance", type = bool, default = True)
+    parser.add_argument("--plot_feature_importance", type = bool, default = False)
     parser.add_argument("--plot_temporal_feature_importance", type = bool, default = False)
     parser.add_argument("--plot_error_bar", type = bool, default = False)
     
