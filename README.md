@@ -156,14 +156,13 @@ Jinsu Kim (2024). **Bayesian-Disruption-Prediction**. GitHub.
 
 #### 📚 BibTeX:
 ```bibtex
-@software{Kim_RL_based_Fusion_2024,
+@software{Kim_Bayesian_Deep_Learning_2024,
 author = {Kim, Jinsu},
-doi = {https://doi.org/10.48550/arXiv.2409.08231},
+doi = {https://doi.org/10.1088/1361-6587/ad48b7},
 license = {MIT},
-month = sep,
-title = {{Deep Reinforcement Learning based Fusion Reactor Design Optimization Code}},
-url = {https://github.com/ZINZINBIN/Fusion-Reactor-Design-Optimization},
-howpublished = {\url{https://github.com/ZINZINBIN/Fusion-Reactor-Design-Optimization}},
+month = may,
+title = {{Bayesian Deep Learning based Disruption Prediction Model}},
+url = {https://github.com/ZINZINBIN/Bayesian-Disruption-Prediction},
 version = {1.0.0},
 year = {2024}
 }
