@@ -143,5 +143,28 @@
     Finally, we applied Integrated Gradients algorithm to compute the feature importance during the inference process, thereby enabling the cause estimation for predicting disruptions. Above figures show the feature importance for an example of true alarm case and temporal feature importance during the thermal quench process. Through the input feature importance, it may be possible not only to predict the disruption but also to estimate the causes of disruptions, which will provide additional information of mitigating disruptions by estimating the causes. 
 </div>
 
-## Reference
-- TCN architecture combined with disruption predictors: Michael Churchil <a href = "https://github.com/rmchurch/disruptcnn" target = "_blank">[github: disruptioncnn]</a>
+## 📖 Citation
+If you use this repository in your research, please cite the following:
+
+### 📜 Research Article
+[Enhancing disruption prediction through Bayesian neural network in KSTAR](https://doi.org/10.48550/arXiv.2409.08231)  
+Jinsu Kim et al 2024 Plasma Phys. Control. Fusion 66 075001
+
+### 📌 Code Repository
+Jinsu Kim (2024). **Bayesian-Disruption-Prediction**. GitHub.  
+[https://github.com/ZINZINBIN/Bayesian-Disruption-Prediction](https://github.com/ZINZINBIN/Bayesian-Disruption-Prediction)
+
+#### 📚 BibTeX:
+```bibtex
+@software{Kim_RL_based_Fusion_2024,
+author = {Kim, Jinsu},
+doi = {https://doi.org/10.48550/arXiv.2409.08231},
+license = {MIT},
+month = sep,
+title = {{Deep Reinforcement Learning based Fusion Reactor Design Optimization Code}},
+url = {https://github.com/ZINZINBIN/Fusion-Reactor-Design-Optimization},
+howpublished = {\url{https://github.com/ZINZINBIN/Fusion-Reactor-Design-Optimization}},
+version = {1.0.0},
+year = {2024}
+}
+```
